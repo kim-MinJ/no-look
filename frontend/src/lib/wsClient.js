@@ -2,7 +2,7 @@
  * WebSocket client for real-time communication
  */
 
-const WS_URL = 'ws://127.0.0.1:8080/ws';
+const WS_URL = 'ws://127.0.0.1:8000/ws/control';
 
 export const ConnectionState = {
     CONNECTED: 'CONNECTED',

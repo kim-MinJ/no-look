@@ -1,5 +1,9 @@
-opencv-python
-mediapipe
+# MediaPipe (mp.solutions 유지용)
+mediapipe==0.10.21
+
+# Core deps
+opencv-python>=4.8,<5
+numpy>=1.24,<2
 pyvirtualcam
-numpy
+
 openai
