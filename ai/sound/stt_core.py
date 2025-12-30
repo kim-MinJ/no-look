@@ -2,6 +2,10 @@ import speech_recognition as sr
 from faster_whisper import WhisperModel
 import os
 import json
+import sys
+
+# Windows 콘솔 인코딩 설정 (이모지 출력용)
+sys.stdout.reconfigure(encoding='utf-8')
 
 # === Config 로딩 ===
 def load_config():
@@ -17,6 +21,7 @@ def load_config():
             "settings": {"device_index": 0, "model_size": "small", "language": "ko"}
         }
 
+
 class GhostEars:
     def __init__(self, config=None):
         """
@@ -26,18 +31,9 @@ class GhostEars:
             config = load_config()
         
         self.config = config
-        settings = config.get("settings", {})
-        triggers = config.get("triggers", {})
+        self._apply_config(config)
         
-        # 설정값 추출
-        self.device_index = settings.get("device_index", 0)
-        model_size = settings.get("model_size", "small")
-        self.language = settings.get("language", "ko")
-        
-        # 트리거 설정
-        self.trigger_keywords = triggers.get("keywords", [])
-        self.question_patterns = triggers.get("question_patterns", ["?"])
-        
+        model_size = self.config.get("settings", {}).get("model_size", "small")
         print(f"--- 🎧 [GhostEars] 모델 로딩 중... ({model_size}) ---")
         print(f"📌 트리거 키워드: {self.trigger_keywords}")
         
@@ -50,6 +46,30 @@ class GhostEars:
             
         self.recognizer = sr.Recognizer()
         self.temp_filename = "temp_ghost_audio.wav"
+
+    def _apply_config(self, config):
+        """설정값을 인스턴스 변수에 적용"""
+        settings = config.get("settings", {})
+        triggers = config.get("triggers", {})
+        
+        # 설정값 추출
+        self.device_index = settings.get("device_index", 0)
+        self.language = settings.get("language", "ko")
+        
+        # 트리거 설정
+        self.trigger_keywords = triggers.get("keywords", [])
+        self.question_patterns = triggers.get("question_patterns", ["?"])
+
+    def reload_config(self):
+        """
+        config.json을 다시 읽어서 트리거 설정 갱신
+        Frontend에서 설정 변경 후 호출
+        """
+        self.config = load_config()
+        self._apply_config(self.config)
+        print(f"🔄 설정 다시 로드됨!")
+        print(f"📌 새 트리거 키워드: {self.trigger_keywords}")
+        return True
 
     def check_trigger(self, text):
         """
@@ -87,7 +107,10 @@ class GhostEars:
                 segments, info = self.model.transcribe(
                     self.temp_filename, 
                     beam_size=5, 
-                    language=self.language
+                    language=self.language,
+                    initial_prompt="회의, 수업, 발표, 질문, 학생, 교수",  # 컨텍스트 힌트
+                    vad_filter=True,  # 음성 구간만 인식 (노이즈 제거)
+                    vad_parameters=dict(min_silence_duration_ms=500)
                 )
                 
                 full_text = ""

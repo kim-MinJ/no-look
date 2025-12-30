@@ -1,9 +1,9 @@
 {
     "triggers": {
         "keywords": [
-            "철수",
-            "김철수",
-            "철수야"
+            "정상화",
+            "신창섭",
+            "200만"
         ],
         "question_patterns": [
             "?",
@@ -14,7 +14,7 @@
     },
     "settings": {
         "device_index": 5,
-        "model_size": "small",
+        "model_size": "medium",
         "language": "ko",
         "sensitivity": "normal"
     },
