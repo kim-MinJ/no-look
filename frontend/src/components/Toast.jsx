@@ -42,6 +42,7 @@ function ToastItem({ toast, onRemove }) {
             </button>
         </div>
     );
+
 }
 
 /**
