@@ -1,7 +1,0 @@
-fastapi
-uvicorn
-
-pyaudio
-obs-websocket-py
-websockets
-python-dotenv

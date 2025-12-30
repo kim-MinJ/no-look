@@ -11,9 +11,9 @@ class VideoState:
 
     def __init__(self):
         self.target_mode = self.Mode.REAL
-        self.alpha = 0.0  # 0.0 = Real, 1.0 = Fake
+        self.alpha = 0.0  # 0.0 = 실제, 1.0 = 가짜
         self.last_update = time.time()
-        self.fade_duration = 0.3  # seconds
+        self.fade_duration = 0.3  # 초단위
 
     def set_target(self, mode: int, fade_ms: float = 300):
         self.target_mode = mode
@@ -52,7 +52,7 @@ class LightingMatcher:
         self._apply_adjustment(fake_frame)
 
     def _calculate_diff(self, real, fake):
-        # Downsample for performance (1/4 size)
+        # 성능을 위해 다운샘플링 (1/4 크기)
         h, w = real.shape[:2]
         small_size = (max(1, w // 4), max(1, h // 4))
         
@@ -73,7 +73,7 @@ class LightingMatcher:
         fake_lab = cv2.cvtColor(fake, cv2.COLOR_BGR2Lab)
         l, a, b = cv2.split(fake_lab)
         
-        # Apply brightness diff
+        # 밝기 차이 적용
         l = cv2.add(l, self.avg_diff)
         
         fake_lab = cv2.merge([l, a, b])
@@ -91,7 +91,7 @@ class VideoEngine:
         self.latest_frame = None
         self.lock = threading.Lock()
         
-        # Start processing thread
+        # 처리 스레드 시작
         self.thread = threading.Thread(target=self._process_loop, daemon=True)
         self.thread.start()
 
@@ -110,13 +110,13 @@ class VideoEngine:
 
     def _process_loop(self):
         while self.running:
-            # 1. Read Real
+            # 1. 실제 영상 읽기
             ret_real, real_frame = self.real_cam.read()
             if not ret_real:
                 time.sleep(0.01)
                 continue
 
-            # 2. Read Fake (Loop)
+            # 2. 가짜 영상 읽기 (루프)
             ret_fake, fake_frame = self.fake_video.read()
             if not ret_fake:
                 self.fake_video.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -124,13 +124,13 @@ class VideoEngine:
                 if not ret_fake:
                     continue
             
-            # Resize fake to match real
+            # 실제 영상에 맞춰 가짜 영상 크기 조절
             fake_frame = cv2.resize(fake_frame, (real_frame.shape[1], real_frame.shape[0]))
 
-            # 3. Match Lighting
+            # 3. 조명 일치
             self.matcher.match(real_frame, fake_frame)
 
-            # 4. Blend
+            # 4. 블렌딩
             self.state.update_alpha()
             alpha = self.state.alpha
             
@@ -139,7 +139,7 @@ class VideoEngine:
             with self.lock:
                 self.latest_frame = output
             
-            time.sleep(0.01) # Approx 60-100 FPS cap
+            time.sleep(0.01) # 약 60-100 FPS 제한
 
     def stop(self):
         self.running = False

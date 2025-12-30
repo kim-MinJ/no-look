@@ -7,3 +7,11 @@ numpy>=1.24,<2
 pyvirtualcam
 
 openai
+
+fastapi
+uvicorn
+
+pyaudio
+obs-websocket-py
+websockets
+python-dotenv
