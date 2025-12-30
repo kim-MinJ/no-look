@@ -1,0 +1,17 @@
+# === No-Look Sound Module ===
+# STT (Speech-to-Text)
+faster-whisper>=1.0.0
+SpeechRecognition>=3.10.0
+
+# Audio Processing
+audioop-lts  # Python 3.13+ 호환
+numpy
+
+# GPU Support (CUDA)
+# cuDNN은 conda로 별도 설치 필요: conda install cudnn -c conda-forge
+
+# Future: GPT Integration
+openai>=1.0.0
+
+# Future: Auto Chat
+pyautogui>=0.9.54

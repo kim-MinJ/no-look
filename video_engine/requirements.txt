@@ -1,0 +1,5 @@
+pyvirtualcam
+opencv-python
+flask-socketio
+eventlet
+numpy
