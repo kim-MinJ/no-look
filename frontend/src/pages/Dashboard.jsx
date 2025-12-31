@@ -109,7 +109,7 @@ export default function Dashboard() {
                 <div className="warmup-overlay">
                     <div className="warmup-card">
                         <div className="warmup-title">녹화 중입니다</div>
-                        <div className="warmup-desc">2분 동안 가만히 있어주세요</div>
+                        <div className="warmup-desc">{warmupTotalSec}초 동안 가만히 있어주세요</div>
                         <div className="warmup-timer">{mmss(warmupRemainingSec)}</div>
                         <div className="warmup-bar">
                             <div className="warmup-bar-fill" style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }} />

@@ -13,8 +13,32 @@ export default function VideoPreview({ mode, ratio, addToast }) {
 
     const startWebcam = useCallback(async () => {
         try {
+            let videoConstraints = { width: 320, height: 240 };
+
+            // ✅ macOS에서 Python 백엔드와 충돌 방지를 위해 OBS Virtual Camera 자동 선택
+            // (Windows 등 다른 OS는 navigator.platform 체크로 건너뜀)
+            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+            if (isMac) {
+                try {
+                    // 권한 획득용 (이미 있으면 통과)
+                    await navigator.mediaDevices.getUserMedia({ video: true }).then(s => s.getTracks().forEach(t => t.stop()));
+
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const obsCam = devices.find(d =>
+                        d.kind === 'videoinput' && d.label.toLowerCase().includes('obs')
+                    );
+
+                    if (obsCam) {
+                        console.log("[VideoPreview] MacOS detected: Switching to OBS Virtual Camera to avoid conflict.");
+                        videoConstraints.deviceId = { exact: obsCam.deviceId };
+                    }
+                } catch (e) {
+                    console.warn("[VideoPreview] Autodetect camera failed:", e);
+                }
+            }
+
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 320, height: 240 },
+                video: videoConstraints,
             });
 
             streamRef.current = stream;
@@ -132,9 +156,9 @@ export default function VideoPreview({ mode, ratio, addToast }) {
             <div className="preview-mode-indicator">
                 <span className={`mode-dot ${mode === 'REAL' ? 'active' : ''}`}>●</span>
                 <span className="mode-text">
-          현재 모드: <strong>{mode}</strong> ({Math.round(ratio * 100)}%)
+                    현재 모드: <strong>{mode}</strong> ({Math.round(ratio * 100)}%)
                     {isTransitioning && ' (전환 중...)'}
-        </span>
+                </span>
                 <span className={`mode-dot ${mode === 'FAKE' ? 'active' : ''}`}>●</span>
             </div>
         </div>
