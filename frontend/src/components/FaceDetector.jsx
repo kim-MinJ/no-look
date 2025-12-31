@@ -99,11 +99,19 @@ const FaceDetector = ({ onDistraction }) => {
     // 2. OBS Connection
     const connectOBS = async () => {
         try {
-            await obsRef.current.connect("ws://localhost:4455", "CDeP1CouhTyM5FTT");
+            await obsRef.current.connect("ws://127.0.0.1:4455", "CDeP1CouhTyM5FTT");
             console.log("✅ OBS Connected");
             setObsConnected(true);
         } catch (error) {
             console.error("❌ OBS Connection Failed", error);
+
+            // ✅ 원인 추적용 상세 로그
+            console.error("name:", error?.name);
+            console.error("message:", error?.message);
+            console.error("code:", error?.code);
+            console.error("details:", error?.details);
+            console.error("stack:", error?.stack);
+
             setObsConnected(false);
         }
     };

@@ -32,6 +32,14 @@ class BoolPayload(BaseModel):
 class StringPayload(BaseModel):
     value: str
 
+obs = OBSController()
+obs.connect()
+
+@app.post("/control/scene")
+async def change_scene(payload: dict):
+    obs.switch_scene(payload["scene"])
+    return {"ok": True}
+
 
 
 @app.on_event("startup")
@@ -43,6 +51,49 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     engine.stop()
+
+@app.websocket("/ws/ai")
+async def ai_service(websocket: WebSocket):
+    """
+    AI Service WebSocket
+    Handles:
+    - Bot reactions (OpenAI)
+    - AI suggestions (Gemini)
+    """
+    await websocket.accept()
+    print("🔗 Frontend connected to AI service")
+    
+    try:
+        while True:
+            data = await websocket.receive_json()
+            message_type = data.get("type")
+            
+            # OpenAI Bot Reaction
+            if message_type == "reaction_request":
+                print("🤖 Generating bot reaction...")
+                reaction = meeting_bot.get_reaction()
+                await websocket.send_json({
+                    "type": "reaction",
+                    "text": reaction
+                })
+                print(f"✅ Sent reaction: {reaction}")
+            
+            # Gemini AI Suggestion
+            elif message_type == "suggestion_request":
+                transcript = data.get("transcript", "")
+                print(f"🤖 Generating AI suggestion for: {transcript[:50]}...")
+                suggestion = macro_bot.get_suggestion(transcript)
+                await websocket.send_json({
+                    "type": "suggestion",
+                    "text": suggestion
+                })
+                print(f"✅ Sent suggestion: {suggestion}")
+            
+            else:
+                print(f"⚠️ Unknown message type: {message_type}")
+                
+    except WebSocketDisconnect:
+        print("❌ Frontend disconnected from AI service")
 
 
 @app.websocket("/ws/state")
