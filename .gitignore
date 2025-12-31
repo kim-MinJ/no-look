@@ -405,3 +405,13 @@ ai/__pycache__/
 
 # optional: warmup/rolling buffer files
 ai/assets/warmup_*.mp4
+# ---- No-Look generated media (DO NOT COMMIT) ----
+ai/assets/*.mp4
+ai/assets/rolling/
+ai/assets/rolling/**
+ai/tts_out/
+ai/tts_out/**
+*.mp4
+*.mkv
+*.avi
+*.mov

@@ -9,17 +9,20 @@ from detector import DistractionDetector
 from generator import StreamGenerator
 from bridge import VirtualCam
 from bot import MeetingBot
-from rolling_recorder import RollingRecorder
 
 
 class NoLookEngine:
     """
     - 웹캠을 단독 점유 (OpenCV)
     - detector로 상태 판단
-    - RollingRecorder로 최근 N분 영상 조각을 계속 저장(롤링)
-    - 딴짓 감지 시, 최근 영상 조각 playlist로 generator 재생
+    - generator로 fake 프레임/블렌딩
     - VirtualCam으로 출력
     - 최신 상태(state)를 서버가 가져갈 수 있게 제공
+
+    ✅ 추가:
+    - 시작 후 5분 워밍업 녹화(로컬 mp4 저장)
+    - 워밍업 동안 추적(미디어파이프) 완전 OFF
+    - 워밍업이 끝나면, 방금 녹화한 영상으로 fake 소스 자동 교체
     """
 
     def __init__(
@@ -27,33 +30,32 @@ class NoLookEngine:
         webcam_id: int = 0,
         fake_video_path: Optional[str] = None,
         transition_time: float = 0.5,
-        fps_limit: Optional[float] = None,
-        # ✅ rolling config
-        roll_keep_seconds: float = 300.0,      # 5분 유지
-        roll_segment_seconds: float = 10.0,    # 10초 조각
-        roll_trigger_window: float = 60.0,     # 딴짓 시 최근 60초 재생(더 자연스러움)
+        fps_limit: Optional[float] = None,  # None이면 제한 없음
     ):
         self.webcam_id = webcam_id
         self.transition_time = float(transition_time)
         self.fps_limit = fps_limit
 
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        self.fake_video_path = fake_video_path or os.path.join(base_dir, "assets", "fake_sample.mp4")
+        self.assets_dir = os.path.join(base_dir, "assets")
+        os.makedirs(self.assets_dir, exist_ok=True)
+
+        # ✅ 워밍업(5분) 설정
+        self.warmup_seconds = 300
+        self.warmup_active = True
+        self.warmup_end_ts = time.time() + self.warmup_seconds
+        self.warmup_video_path = os.path.join(self.assets_dir, "warmup_5min.mp4")
+        self._warmup_writer: Optional[cv2.VideoWriter] = None
+        self._warmup_writer_ready = False
+        self.fake_source = "sample"  # "sample" | "warmup"
+
+        # 기존 fake 샘플 경로
+        self.fake_video_path = fake_video_path or os.path.join(self.assets_dir, "fake_sample.mp4")
 
         # modules
         self.detector = DistractionDetector()
         self.generator = StreamGenerator(self.fake_video_path)
         self.bot = MeetingBot()
-
-        # rolling recorder
-        self.roll_keep_seconds = float(roll_keep_seconds)
-        self.roll_segment_seconds = float(roll_segment_seconds)
-        self.roll_trigger_window = float(roll_trigger_window)
-
-        self.roll_dir = os.path.join(base_dir, "assets", "rolling")
-        os.makedirs(self.roll_dir, exist_ok=True)
-
-        self.rolling: Optional[RollingRecorder] = None
 
         # runtime
         self._thread: Optional[threading.Thread] = None
@@ -64,7 +66,7 @@ class NoLookEngine:
         self.bridge: Optional[VirtualCam] = None
 
         # state machine
-        self.mode = "REAL"
+        self.mode = "REAL"  # "REAL" or "FAKE"
         self.trans_start = time.time()
 
         # latches / controls
@@ -74,6 +76,7 @@ class NoLookEngine:
 
         self.last_fake_frame = None  # pause용
 
+        # latest exported state (server will read this)
         self._state: Dict[str, Any] = {
             "mode": "REAL",
             "ratio": 0.0,
@@ -83,10 +86,14 @@ class NoLookEngine:
             "reasons": [],
             "timestamp": time.time(),
             "reaction": None,
-            "fakeSource": "sample",  # sample | rolling
+            # ✅ 워밍업 상태 추가
+            "warmup": True,
+            "warmupRemainingSec": self.warmup_seconds,
+            "trackingEnabled": False,
+            "fakeSource": self.fake_source,
         }
 
-    # ---------- public control API ----------
+    # ---------- public control API (HTTP가 호출) ----------
     def set_pause_fake(self, value: bool) -> None:
         with self._lock:
             self.pause_fake_playback = bool(value)
@@ -95,6 +102,7 @@ class NoLookEngine:
         with self._lock:
             self.force_real = bool(value)
             if self.force_real:
+                # 강제로 REAL로 갈 때는 전환 애니메이션 새로 시작
                 if self.mode != "REAL":
                     self.mode = "REAL"
                     self.trans_start = time.time()
@@ -102,12 +110,6 @@ class NoLookEngine:
     def reset_lock(self) -> None:
         with self._lock:
             self.locked_fake = False
-            # generator 원복
-            self.generator.set_single_video(self.fake_video_path)
-            # 롤링 녹화 재개
-            if self.rolling:
-                self.rolling.resume()
-
             if self.mode != "REAL":
                 self.mode = "REAL"
                 self.trans_start = time.time()
@@ -129,6 +131,14 @@ class NoLookEngine:
         if self._thread:
             self._thread.join(timeout=2.0)
 
+        try:
+            if self._warmup_writer is not None:
+                self._warmup_writer.release()
+        except Exception:
+            pass
+        self._warmup_writer = None
+        self._warmup_writer_ready = False
+
         if self.cap is not None:
             try:
                 self.cap.release()
@@ -138,11 +148,46 @@ class NoLookEngine:
 
         self.bridge = None
 
-        if self.rolling:
-            try:
-                self.rolling.pause()
-            except Exception:
-                pass
+    # ---------- warmup helpers ----------
+    def _init_warmup_writer(self, width: int, height: int, fps: float) -> None:
+        """
+        ✅ mp4로 5분 녹화 저장 (warmup_5min.mp4)
+        """
+        try:
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            writer = cv2.VideoWriter(self.warmup_video_path, fourcc, float(fps), (int(width), int(height)))
+            if not writer.isOpened():
+                print("[Warmup] VideoWriter open failed:", self.warmup_video_path)
+                self._warmup_writer = None
+                self._warmup_writer_ready = False
+                return
+            self._warmup_writer = writer
+            self._warmup_writer_ready = True
+            print("[Warmup] Recording to:", self.warmup_video_path)
+        except Exception as e:
+            print("[Warmup] Writer init error:", e)
+            self._warmup_writer = None
+            self._warmup_writer_ready = False
+
+    def _finish_warmup(self) -> None:
+        """
+        ✅ 5분 끝: writer 닫고, generator fake 소스를 warmup 영상으로 교체
+        """
+        try:
+            if self._warmup_writer is not None:
+                self._warmup_writer.release()
+        except Exception:
+            pass
+
+        self._warmup_writer = None
+        self._warmup_writer_ready = False
+
+        self.warmup_active = False
+        self.fake_source = "warmup"
+
+        # 방금 만든 warmup 영상으로 fake 소스 교체
+        self.generator.reload(self.warmup_video_path)
+        print("[Warmup] Done. Fake source switched to warmup_5min.mp4")
 
     # ---------- internal loop ----------
     def _run(self) -> None:
@@ -150,25 +195,20 @@ class NoLookEngine:
         if not self.cap.isOpened():
             raise RuntimeError(f"Webcam open failed: {self.webcam_id}")
 
-        width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 640
-        height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 480
+        width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-        # fps 계산 (CAP_PROP_FPS가 0인 경우 많아서 fallback)
-        cam_fps = float(self.cap.get(cv2.CAP_PROP_FPS))
-        if not cam_fps or cam_fps <= 1:
-            cam_fps = float(self.fps_limit) if self.fps_limit else 30.0
+        # fps 결정 (limit 우선)
+        cap_fps = self.cap.get(cv2.CAP_PROP_FPS)
+        if not cap_fps or cap_fps <= 1:
+            cap_fps = 30.0
+        fps = float(self.fps_limit) if self.fps_limit else float(cap_fps)
 
-        self.bridge = VirtualCam(width, height, fps=int(cam_fps))
+        # VirtualCam init
+        self.bridge = VirtualCam(width, height, fps=int(fps) if fps else 30)
 
-        # ✅ rolling recorder init
-        self.rolling = RollingRecorder(
-            out_dir=self.roll_dir,
-            segment_seconds=self.roll_segment_seconds,
-            keep_seconds=self.roll_keep_seconds,
-            fourcc="mp4v",
-            ext=".mp4",
-        )
-        self.rolling.configure(width, height, cam_fps)
+        # ✅ warmup 녹화 writer 준비
+        self._init_warmup_writer(width, height, fps if fps else 30.0)
 
         last_frame_time = time.time()
 
@@ -178,56 +218,87 @@ class NoLookEngine:
                 time.sleep(0.01)
                 continue
 
-            # ✅ (0) rolling record (FAKE 락 걸려서 FAKE 재생 중이면 굳이 녹화 멈춰도 됨)
-            with self._lock:
-                _locked = self.locked_fake
-                _force_real = self.force_real
-            if self.rolling and (not _locked or _force_real):
-                self.rolling.write(real_frame)
-            elif self.rolling and _locked and (not _force_real):
-                # 락 걸려서 FAKE로 갈 때는 파일 삭제/충돌 이슈 피하려고 녹화 잠깐 멈춤
-                self.rolling.pause()
+            now = time.time()
 
-            # (1) detect
+            # ======================================================
+            # ✅ WARMUP MODE: 5분 동안 "녹화만" + "추적 OFF"
+            # ======================================================
+            if self.warmup_active:
+                remaining = max(0, int(self.warmup_end_ts - now))
+
+                # 녹화
+                if self._warmup_writer_ready and self._warmup_writer is not None:
+                    try:
+                        self._warmup_writer.write(real_frame)
+                    except Exception:
+                        pass
+
+                # warmup 종료 체크
+                if now >= self.warmup_end_ts:
+                    self._finish_warmup()
+                    remaining = 0
+
+                # 워밍업 중엔 무조건 REAL 송출(추적/락/전환 없음)
+                if self.bridge is not None:
+                    self.bridge.send(real_frame)
+
+                with self._lock:
+                    self.mode = "REAL"
+                    self.locked_fake = False
+                    self._state = {
+                        "mode": "REAL",
+                        "ratio": 0.0,
+                        "lockedFake": False,
+                        "pauseFake": bool(self.pause_fake_playback),
+                        "forceReal": bool(self.force_real),
+                        "reasons": ["WARMUP_RECORDING"],
+                        "timestamp": time.time(),
+                        "reaction": None,
+                        "warmup": True,
+                        "warmupRemainingSec": remaining,
+                        "trackingEnabled": False,
+                        "fakeSource": self.fake_source,
+                    }
+
+                # fps limit (선택)
+                if self.fps_limit:
+                    dt = time.time() - last_frame_time
+                    target_dt = 1.0 / float(self.fps_limit)
+                    if dt < target_dt:
+                        time.sleep(target_dt - dt)
+                    last_frame_time = time.time()
+
+                continue
+
+            # ======================================================
+            # ✅ NORMAL MODE: warmup 이후부터 기존 추적 로직
+            # ======================================================
             is_distracted, reasons = self.detector.is_distracted(real_frame)
 
             with self._lock:
                 force_real = self.force_real
                 pause_fake = self.pause_fake_playback
 
+                # latch(한번 딴짓이면 FAKE 고정) - force_real이면 latch 무시
                 reaction = None
-                fake_source = self._state.get("fakeSource", "sample")
-
-                # (2) latch: 첫 딴짓 순간에만 locked_fake + playlist 스냅샷
                 if (not force_real) and is_distracted and (not self.locked_fake):
                     self.locked_fake = True
                     reaction = self.bot.get_reaction()
 
-                    # ✅ 딴짓 순간: 최근 영상 조각을 generator에 장착
-                    if self.rolling:
-                        playlist = self.rolling.get_recent_playlist(window_seconds=self.roll_trigger_window)
-                        if playlist:
-                            self.generator.set_playlist(playlist, start_from_end=True)
-                            fake_source = "rolling"
-                        else:
-                            # 아직 조각이 없으면 샘플로 fallback
-                            self.generator.set_single_video(self.fake_video_path)
-                            fake_source = "sample"
-
-                # (3) target mode
+                # target mode
                 target_mode = "REAL" if force_real else ("FAKE" if self.locked_fake else "REAL")
 
-                # (4) transition start
+                # transition start
                 if target_mode != self.mode:
                     self.mode = target_mode
                     self.trans_start = time.time()
 
-                # (5) ratio
+                # ratio
                 elapsed = time.time() - self.trans_start
                 progress = min(elapsed / self.transition_time, 1.0)
                 ratio = progress if self.mode == "FAKE" else (1.0 - progress)
 
-            # (6) fake frame
+            # generate fake frame (pause면 마지막 프레임 고정)
             if self.mode == "FAKE":
                 if pause_fake and (self.last_fake_frame is not None):
                     fake_frame = self.last_fake_frame
@@ -238,6 +309,7 @@ class NoLookEngine:
                     else:
                         self.last_fake_frame = fake_frame
 
+                # resize to match
                 if fake_frame.shape[:2] != real_frame.shape[:2]:
                     fake_frame = cv2.resize(fake_frame, (real_frame.shape[1], real_frame.shape[0]))
 
@@ -245,11 +317,11 @@ class NoLookEngine:
             else:
                 output_frame = real_frame
 
-            # (7) virtual cam output
+            # virtual cam output
             if self.bridge is not None:
                 self.bridge.send(output_frame)
 
-            # (8) export state
+            # export state
             with self._lock:
                 self._state = {
                     "mode": self.mode,
@@ -259,16 +331,17 @@ class NoLookEngine:
                     "forceReal": bool(self.force_real),
                     "reasons": list(reasons),
                     "timestamp": time.time(),
-                    "reaction": reaction,
-                    "fakeSource": fake_source,
+                    "reaction": reaction,  # 락 처음 걸릴 때만 값 들어감
+                    "warmup": False,
+                    "warmupRemainingSec": 0,
+                    "trackingEnabled": True,
+                    "fakeSource": self.fake_source,
                 }
 
-            # (9) fps limit
+            # fps limit (선택)
             if self.fps_limit:
                 dt = time.time() - last_frame_time
                 target_dt = 1.0 / float(self.fps_limit)
                 if dt < target_dt:
                     time.sleep(target_dt - dt)
                 last_frame_time = time.time()
-
-
