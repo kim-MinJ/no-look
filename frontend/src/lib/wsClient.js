@@ -16,16 +16,23 @@ class WSClient {
     }
 
     connect() {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
+        // ✅ OPEN 뿐 아니라 CONNECTING도 막아야 중복 연결 안 생김
+        if (this.ws && (
+            this.ws.readyState === WebSocket.OPEN ||
+            this.ws.readyState === WebSocket.CONNECTING
+        )) return;
 
         this.setState(ConnectionState.CONNECTING);
 
-        this.ws = new WebSocket(WS_URL);
+        const ws = new WebSocket(WS_URL);
+        this.ws = ws;
 
-        this.ws.onopen = () => {
+        ws.onopen = () => {
+            // 혹시 레이스로 다른 ws가 생겼으면 무시
+            if (this.ws !== ws) return;
+
             this.setState(ConnectionState.CONNECTED);
 
-            // 서버 ws_state가 receive_text()로 대기하므로 keep-alive ping
             this.pingTimer = setInterval(() => {
                 if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                     this.ws.send('ping');
@@ -33,24 +40,26 @@ class WSClient {
             }, 8000);
         };
 
-        this.ws.onclose = () => {
-            this.cleanup();
-            this.setState(ConnectionState.DISCONNECTED);
-        };
-
-        this.ws.onerror = () => {
-            this.cleanup();
-            this.setState(ConnectionState.DISCONNECTED);
-        };
-
-        this.ws.onmessage = (event) => {
+        ws.onmessage = (event) => {
+            if (this.ws !== ws) return;
             try {
                 const data = JSON.parse(event.data);
-                // data = { mode, ratio, lockedFake, pauseFake, forceReal, reasons, reaction, timestamp }
                 this.onMessage?.(data);
             } catch (e) {
                 console.error('WS parse failed:', e);
             }
+        };
+
+        ws.onclose = () => {
+            if (this.ws !== ws) return;
+            this.cleanup();
+            this.setState(ConnectionState.DISCONNECTED);
+        };
+
+        ws.onerror = () => {
+            if (this.ws !== ws) return;
+            this.cleanup();
+            this.setState(ConnectionState.DISCONNECTED);
         };
     }
 
@@ -59,12 +68,21 @@ class WSClient {
             clearInterval(this.pingTimer);
             this.pingTimer = null;
         }
+        // 핸들러 정리(메모리/중복 호출 방지)
+        if (this.ws) {
+            this.ws.onopen = null;
+            this.ws.onclose = null;
+            this.ws.onerror = null;
+            this.ws.onmessage = null;
+        }
         this.ws = null;
     }
 
     disconnect() {
+        // ✅ close 먼저 하고 cleanup
+        const ws = this.ws;
         this.cleanup();
-        if (this.ws) this.ws.close();
+        try { ws?.close(1000, 'client disconnect'); } catch {}
         this.setState(ConnectionState.DISCONNECTED);
     }
 
