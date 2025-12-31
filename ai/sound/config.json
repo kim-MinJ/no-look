@@ -12,6 +12,11 @@
             "세요"
         ]
     },
+    "personalization": {
+        "user_role": "강의를 듣는 대학생",
+        "meeting_topic": "전공 수업 (질문 및 출석 대응)",
+        "speaking_style": "학생다운 정중하면서도 자연스러운 말투"
+    },
     "settings": {
         "device_index": 1,
         "model_size": "medium",
