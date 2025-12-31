@@ -546,3 +546,65 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
+/* =========================
+   Warmup Overlay
+   ========================= */
+.warmup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.warmup-card {
+  width: min(420px, calc(100% - 32px));
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 18px 18px 16px;
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.warmup-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.warmup-desc {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin-bottom: 10px;
+}
+
+.warmup-timer {
+  font-size: 2.1rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+
+.warmup-bar {
+  height: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.warmup-bar-fill {
+  height: 100%;
+  background: var(--accent-primary);
+  width: 0%;
+  transition: width 0.2s linear;
+}
+
+.warmup-sub {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
