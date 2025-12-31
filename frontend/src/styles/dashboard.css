@@ -608,3 +608,58 @@ body {
   color: var(--text-muted);
   font-size: 0.85rem;
 }
+
+/* ===================================
+   Transition Selector
+   =================================== */
+.transition-section {
+  display: flex;
+  justify-content: center;
+}
+
+.transition-selector-card {
+  width: 100%;
+  max-width: 500px;
+  background: var(--bg-card);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-md);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+.selector-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.selector-row {
+  display: flex;
+  gap: var(--spacing-sm);
+  width: 100%;
+  justify-content: center;
+}
+
+.selector-input {
+  flex: 1;
+  max-width: 300px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.selector-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.btn-apply {
+  min-width: 80px;
+}

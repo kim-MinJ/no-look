@@ -1,5 +1,6 @@
 # ai/engine.py
 import os
+import sys
 import time
 import threading
 from typing import Any, Dict, Optional
@@ -11,8 +12,9 @@ from generator import StreamGenerator
 from bridge import VirtualCam
 from bot import MeetingBot
 from rolling_recorder import RollingRecorder
+from scene_transition import TransitionManager
 
-import  sys
+
 class NoLookEngine:
     """
     - 웹캠 점유(OpenCV)
@@ -28,9 +30,11 @@ class NoLookEngine:
         fake_video_path: Optional[str] = None,
         transition_time: float = 0.5,
         fps_limit: Optional[float] = None,
-        warmup_seconds: int = 120,
-        rolling_seconds: int = 120,
-        rolling_segment_seconds: int = 10,
+
+        # ✅ 빠른 테스트 세팅
+        warmup_seconds: int = 5,          # ✅ 5초
+        rolling_seconds: int = 10,        # ✅ 10초 버퍼
+        rolling_segment_seconds: int = 2, # ✅ 2초 단위로 자름
     ):
         self.webcam_id = webcam_id
         self.transition_time = float(transition_time)
@@ -49,6 +53,7 @@ class NoLookEngine:
 
         self.detector = DistractionDetector()
         self.generator = StreamGenerator(self.fake_video_path)
+        self.transition_manager = TransitionManager(base_dir)
         self.bot = MeetingBot()
 
         self._thread: Optional[threading.Thread] = None
@@ -68,6 +73,8 @@ class NoLookEngine:
 
         self.last_fake_frame = None
 
+        self.transition_effect = "blackout" # Default effect
+
         self._warmup_start = time.time()
         self._warmup_end = self._warmup_start + self.warmup_seconds
         self._warming_up = True
@@ -82,7 +89,6 @@ class NoLookEngine:
             "timestamp": time.time(),
             "reaction": None,
             "notice": None,
-
             "warmingUp": True,
             "warmupTotalSec": self.warmup_seconds,
             "warmupRemainingSec": self.warmup_seconds,
@@ -96,6 +102,10 @@ class NoLookEngine:
     def set_force_real(self, value: bool) -> None:
         with self._lock:
             self.force_real = bool(value)
+
+    def set_transition_effect(self, effect_name: str) -> None:
+        with self._lock:
+            self.transition_effect = effect_name
             if self.force_real and self.mode != "REAL":
                 self.mode = "REAL"
                 self.trans_start = time.time()
@@ -146,17 +156,11 @@ class NoLookEngine:
                 pass
             self.bridge = None
 
-    # ---------- internal loop ----------
+    # ---------- internal ----------
     def _open_capture(self) -> cv2.VideoCapture:
-        # macOS: AVFoundation이 안정적인 편
         if sys.platform == "darwin":
-            cap = cv2.VideoCapture(self.webcam_id, cv2.CAP_AVFOUNDATION)
-        # Windows: 필요하면 DSHOW가 더 안정적일 때가 있음(원하면 바꿔)
-        elif sys.platform.startswith("win"):
-            cap = cv2.VideoCapture(self.webcam_id)
-        else:
-            cap = cv2.VideoCapture(self.webcam_id)
-        return cap
+            return cv2.VideoCapture(self.webcam_id, cv2.CAP_AVFOUNDATION)
+        return cv2.VideoCapture(self.webcam_id)
 
     def _run(self) -> None:
         self.cap = self._open_capture()
@@ -169,7 +173,6 @@ class NoLookEngine:
 
         self.bridge = VirtualCam(width, height, fps=fps)
 
-        # ✅ rolling recorder 준비
         self.rolling = RollingRecorder(
             out_dir=self.rolling_dir,
             width=width,
@@ -189,7 +192,7 @@ class NoLookEngine:
 
             now = time.time()
 
-            # ✅ warmup 동안은 추적 OFF + 롤링 저장만
+            # ✅ warmup: 추적 OFF + 롤링 저장만
             notice = None
             if self._warming_up:
                 remaining = max(0, int(self._warmup_end - now))
@@ -199,7 +202,7 @@ class NoLookEngine:
 
                 if now >= self._warmup_end:
                     self._warming_up = False
-                    notice = "✅ 2분 녹화 완료! 이제 추적 시작합니다."
+                    notice = "✅ 5초 녹화 완료! 이제 추적 시작합니다."
 
                 if self.bridge is not None:
                     self.bridge.send(real_frame)
@@ -228,7 +231,7 @@ class NoLookEngine:
                     last_frame_time = time.time()
                 continue
 
-            # ✅ warmup 끝난 뒤부터 추적 ON
+            # ✅ 추적 ON
             is_distracted, reasons = self.detector.is_distracted(real_frame)
 
             with self._lock:
@@ -247,23 +250,33 @@ class NoLookEngine:
                     self.mode = target_mode
                     self.trans_start = time.time()
 
-                    if self.mode == "FAKE" and self.rolling is not None:
-                        self.rolling.start_playback()
+                if mode_changed:
+                    self.mode = target_mode
+                    self.trans_start = time.time()
 
-                    if self.mode == "REAL" and self.rolling is not None:
-                        self.rolling.stop_playback()
+                    # FAKE 전환 시 이펙트 시작
+                    if self.mode == "FAKE":
+                        # 프론트엔드에서 설정한 이펙트값 사용
+                        self.transition_manager.start(effect_name=self.transition_effect)
+                        if self.rolling is not None:
+                            self.rolling.start_playback()
+
+                    if self.mode == "REAL":
+                        self.transition_manager.stop()
+                        if self.rolling is not None:
+                            self.rolling.stop_playback()
 
                 elapsed = time.time() - self.trans_start
                 progress = min(elapsed / self.transition_time, 1.0)
                 ratio = progress if self.mode == "FAKE" else (1.0 - progress)
 
-            # ✅ REAL 모드에서는 롤링 계속 저장
+            # ✅ REAL이면 롤링 계속 저장
             if self.rolling is not None:
                 self.rolling.set_recording_enabled(self.mode == "REAL")
                 if self.mode == "REAL":
                     self.rolling.update(real_frame, now)
 
-            # FAKE 프레임 생성
+            # ✅ FAKE 프레임 생성
             if self.mode == "FAKE":
                 fake_frame = None
 
@@ -286,6 +299,13 @@ class NoLookEngine:
                     self.last_fake_frame = fake_frame
 
                 output_frame = self.generator.blend_frames(real_frame, fake_frame, ratio)
+
+                # [Scene Transition Override]
+                # 이펙트가 진행 중이면, 계산된 output_frame 대신 이펙트 프레임을 전송
+                # 이 때, Fade-In 효과를 위해 fake_frame(target_frame)도 함께 전달
+                effect_frame = self.transition_manager.get_frame(real_frame, target_frame=fake_frame)
+                if effect_frame is not None:
+                    output_frame = effect_frame
             else:
                 output_frame = real_frame
 
@@ -299,6 +319,7 @@ class NoLookEngine:
                     "lockedFake": bool(self.locked_fake),
                     "pauseFake": bool(self.pause_fake_playback),
                     "forceReal": bool(self.force_real),
+                    "transitionEffect": self.transition_effect,
                     "reasons": list(reasons),
                     "timestamp": now,
                     "reaction": reaction,

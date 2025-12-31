@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import VideoPreview from '../components/VideoPreview';
 import SttPanel from '../components/SttPanel';
+import TransitionSelector from '../components/TransitionSelector';
 import Toast, { useToast } from '../components/Toast';
 import '../styles/dashboard.css';
 
@@ -45,7 +46,7 @@ export default function Dashboard() {
                 setWarmupTotalSec(s.warmupTotalSec ?? 120);
                 setWarmupRemainingSec(s.warmupRemainingSec ?? 0);
             })
-            .catch(() => {});
+            .catch(() => { });
 
         wsClient.onMessage = (s) => {
             if (!s) return;
@@ -140,18 +141,22 @@ export default function Dashboard() {
                     </div>
 
                     <div className="mode-display">
-            <span className={`mode-indicator ${mode.toLowerCase()}`}>
-              현재: <strong>{mode}</strong> ({Math.round(ratio * 100)}%)
-            </span>
+                        <span className={`mode-indicator ${mode.toLowerCase()}`}>
+                            현재: <strong>{mode}</strong> ({Math.round(ratio * 100)}%)
+                        </span>
                         <span style={{ marginLeft: 12 }}>
-              Locked: <strong>{String(lockedFake)}</strong>
-            </span>
+                            Locked: <strong>{String(lockedFake)}</strong>
+                        </span>
                         {!!reasons?.length && (
                             <span style={{ marginLeft: 12 }}>
-                Reasons: <strong>{reasons.join(', ')}</strong>
-              </span>
+                                Reasons: <strong>{reasons.join(', ')}</strong>
+                            </span>
                         )}
                     </div>
+                </div>
+
+                <div className="transition-section">
+                    <TransitionSelector addToast={addToast} />
                 </div>
 
                 <div className="stt-section">
@@ -160,6 +165,6 @@ export default function Dashboard() {
             </div>
 
             <Toast toasts={toasts} onRemove={removeToast} />
-        </div>
+        </div >
     );
 }

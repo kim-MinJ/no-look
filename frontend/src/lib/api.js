@@ -35,3 +35,12 @@ export async function requestAiReply(transcript, tone = 'polite', useMock = true
 export async function requestMacroType(text, useMock = true) {
     /* 기존 코드 그대로 */
 }
+
+export async function setTransitionEffect(effectName) {
+    const res = await fetch(`${API_BASE_URL}/control/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: effectName }),
+    });
+    return res.json();
+}
