@@ -3,9 +3,8 @@
 FILE COMMENTED OUT BY AGENT
 This file was identified as part of the 'ai_back' module which is not currently connected to the main 'ai' or 'frontend' components.
 It is being commented out to prevent execution conflicts (e.g. port 8000 usage).
-
+"""
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from audio_engine import AudioEngine
 from obs_client import OBSClient
@@ -84,4 +83,4 @@ async def control_socket(websocket: WebSocket):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
-"""
+
