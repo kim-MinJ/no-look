@@ -1,13 +1,22 @@
 # ai/server.py
 import asyncio
 from typing import Set
-
+import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from engine import NoLookEngine
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 모든 출처 허용 (개발용)
+    allow_credentials=True,
+    allow_methods=["*"],  # 모든 메소드 허용 (GET, POST, OPTIONS 등)
+    allow_headers=["*"],
+)
 
 engine = NoLookEngine(webcam_id=0, transition_time=0.5, fps_limit=30.0)
 
@@ -16,6 +25,10 @@ clients: Set[WebSocket] = set()
 
 class BoolPayload(BaseModel):
     value: bool
+
+
+class StringPayload(BaseModel):
+    value: str
 
 
 
@@ -77,6 +90,12 @@ def force_real(payload: BoolPayload):
     return {"ok": True, "forceReal": payload.value}
 
 
+@app.post("/control/transition")
+def set_transition(payload: StringPayload):
+    engine.set_transition_effect(payload.value)
+    return {"ok": True, "transitionEffect": payload.value}
+
+
 @app.post("/control/reset_lock")
 def reset_lock():
     engine.reset_lock()
@@ -86,3 +105,6 @@ def reset_lock():
 @app.get("/state")
 def get_state():
     return engine.get_state()
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=8000)
