@@ -1,0 +1,25 @@
+{
+    "triggers": {
+        "keywords": [
+            "정상화",
+            "신창섭",
+            "200만"
+        ],
+        "question_patterns": [
+            "?",
+            "까요",
+            "나요",
+            "세요"
+        ]
+    },
+    "settings": {
+        "device_index": 5,
+        "model_size": "medium",
+        "language": "ko",
+        "sensitivity": "normal"
+    },
+    "actions": {
+        "on_trigger": "notify",
+        "auto_response": false
+    }
+}
