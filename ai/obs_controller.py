@@ -1,7 +1,7 @@
 from obswebsocket import obsws, requests
 
 class OBSController:
-    def __init__(self, host="localhost", port=4455, password=""):
+    def __init__(self, host="localhost", port=4455, password="CDeP1CouhTyM5F1T"):
         self.ws = obsws(host, port, password)
         self.connected = False
 

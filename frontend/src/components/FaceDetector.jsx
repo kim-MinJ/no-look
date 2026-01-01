@@ -34,8 +34,11 @@ const FaceDetector = ({ onDistraction }) => {
     const mediaRecorderRef = useRef(null);
 
     // OBS State
-    const obsRef = useRef(new OBSWebSocket());
+    const obsRef = useRef(null);
     const [obsConnected, setObsConnected] = useState(false);
+
+    const OBS_URL = "ws://127.0.0.1:4455";
+    const OBS_PASSWORD = "CDeP1CouhTyM5F1T";
 
     // AI Backend WebSocket (반응봇용 유지)
     const aiWsRef = useRef(null);
@@ -49,9 +52,51 @@ const FaceDetector = ({ onDistraction }) => {
 
     const runningMode = "VIDEO";
 
+    // ✅ OBS 연결 (StrictMode 안전)
+    useEffect(() => {
+        let cancelled = false;
+
+        const obs = new OBSWebSocket();
+        obsRef.current = obs;
+
+        obs.on("ConnectionOpened", () => {
+            console.log("OBS ConnectionOpened");
+        });
+
+        obs.on("ConnectionClosed", (e) => {
+            console.log("OBS ConnectionClosed:", e);
+            if (!cancelled) setObsConnected(false);
+        });
+
+        (async () => {
+            try {
+                await obs.connect(OBS_URL, OBS_PASSWORD);
+
+                if (cancelled) {
+                    await obs.disconnect().catch(() => { });
+                    return;
+                }
+
+                console.log("✅ OBS Connected");
+                setObsConnected(true);
+            } catch (e) {
+                if (!cancelled) {
+                    console.error("❌ OBS Connection Failed", e);
+                    setObsConnected(false);
+                }
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+            obs.disconnect().catch(() => { });
+            obsRef.current = null;
+        };
+    }, []);
+
     // 1. Initialize OBS & Models & AI WebSocket
     useEffect(() => {
-        connectOBS();
+        // connectOBS();
         connectAI();
 
         const createLandmarkers = async () => {
@@ -96,30 +141,31 @@ const FaceDetector = ({ onDistraction }) => {
         };
     }, []);
 
-    // 2. OBS Connection
-    const connectOBS = async () => {
-        try {
-            await obsRef.current.connect("ws://127.0.0.1:4455", "CDeP1CouhTyM5FTT");
-            console.log("✅ OBS Connected");
-            setObsConnected(true);
-        } catch (error) {
-            console.error("❌ OBS Connection Failed", error);
+    // // 2. OBS Connection
+    // const connectOBS = async () => {
+    //     try {
+    //         obsRef.current.on("ConnectionClosed", (e) => {
+    //             console.log("OBS ConnectionClosed:", e); // code/reason 나오는지 확인
+    //         });
 
-            // ✅ 원인 추적용 상세 로그
-            console.error("name:", error?.name);
-            console.error("message:", error?.message);
-            console.error("code:", error?.code);
-            console.error("details:", error?.details);
-            console.error("stack:", error?.stack);
+    //         obsRef.current.on("ConnectionOpened", () => {
+    //             console.log("OBS ConnectionOpened");
+    //         });
 
-            setObsConnected(false);
-        }
-    };
+    //         await obsRef.current.connect("ws://localhost:4455", "CDeP1CouhTyM5FTT");
+    //         console.log("✅ OBS Connected");
+    //         setObsConnected(true);
+    //     } catch (error) {
+    //         console.error("❌ OBS Connection Failed", error);
+    //         setObsConnected(false);
+    //     }
+    // };
 
     const switchOBSScene = async (sceneName) => {
+        const obs = obsRef.current;
         if (!obsConnected) return;
         try {
-            await obsRef.current.call("SetCurrentProgramScene", { sceneName });
+            await obs.call("SetCurrentProgramScene", { sceneName });
             console.log(`🎬 OBS Scene: ${sceneName}`);
         } catch (e) {
             console.warn("⚠️ OBS Switch Failed:", e);
