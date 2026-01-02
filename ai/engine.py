@@ -73,7 +73,7 @@ class NoLookEngine:
         self.force_real = False
 
         self.last_fake_frame = None
-        self.transition_effect = "blackout"
+        self.transition_effect = "natural_lag"
 
         # ✅ 핵심: 세션 시작(=첫 접속) 전에는 warmup도, 추적도 안 함
         self.session_active = False
