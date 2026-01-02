@@ -289,6 +289,12 @@ class NoLookEngine:
                 if fake_frame is None:
                     fake_frame = self.generator.get_fake_frame()
 
+                # ✅ [Fix] 롤링/제너레이터 모두 프레임 반환 실패 시,
+                # 바로 리얼타임(real_frame)을 보여주면 영상 전환부에서 깜빡임(Glitch) 발생.
+                # 따라서 이전에 출력했던 FAKE 프레임을 우선 재사용한다.
+                if fake_frame is None and self.last_fake_frame is not None:
+                    fake_frame = self.last_fake_frame
+
                 if fake_frame is None:
                     fake_frame = real_frame.copy()
 

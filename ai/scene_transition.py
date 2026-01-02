@@ -53,7 +53,7 @@ class TransitionManager:
         elif self.current_effect == "blackout":
             return self._get_frame_blackout(real_frame, elapsed, target_frame)
         elif self.current_effect == "natural_lag":
-            return self._get_frame_natural_lag(real_frame, elapsed)
+            return self._get_frame_natural_lag(real_frame, elapsed, target_frame)
         
         return self._get_frame_falling(real_frame, elapsed) # Default
 
@@ -174,7 +174,7 @@ class TransitionManager:
         
         return self._apply_motion_blur_falling(frame, progress) # Default
 
-    def _get_frame_natural_lag(self, real_frame, elapsed):
+    def _get_frame_natural_lag(self, real_frame, elapsed, target_frame=None):
         """
         [Effect: natural_lag]
         약 1초간 마지막 장면에서 멈춰있다가(Fake Lag) 자연스럽게 Fake 영상으로 넘어감.
@@ -192,7 +192,9 @@ class TransitionManager:
         else:
             # 2. End (Return to Fake)
             self.active = False
-            return None
+            # 전환이 끝나는 순간 Fake 영상(target_frame)을 한 번 리턴해주어
+            # 엔진 쪽 블렌딩이 튀거나 비어보이는 1프레임 갭을 방지
+            return target_frame
 
     def _apply_motion_blur_falling(self, frame, progress):
         """
