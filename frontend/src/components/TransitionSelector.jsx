@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { setTransitionEffect } from '../lib/api';
 
 export default function TransitionSelector({ addToast }) {
-    const [effect, setEffect] = useState('blackout');
+    const [effect, setEffect] = useState('natural_lag');
 
     const handleApply = async () => {
         try {
@@ -27,9 +27,10 @@ export default function TransitionSelector({ addToast }) {
                     value={effect}
                     onChange={(e) => setEffect(e.target.value)}
                 >
+                    <option value="natural_lag">Natural Lag (자연스러운 랙/멈춤)</option>
                     <option value="blackout">Blackout (암전 to 페이드인)</option>
                     <option value="falling">Falling (떨어짐 효과)</option>
-                    <option value="natural_lag">Natural Lag (자연스러운 랙/멈춤)</option>
+
                 </select>
                 <button className="btn btn-primary btn-apply" onClick={handleApply}>
                     적용
