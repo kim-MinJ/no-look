@@ -9,7 +9,7 @@ import uvicorn
 from server import app
 
 SERVER_HOST = "127.0.0.1"
-DEFAULT_PORT = 8787
+DEFAULT_PORT = 8000
 
 
 def main():
