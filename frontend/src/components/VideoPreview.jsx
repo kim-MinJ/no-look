@@ -164,3 +164,4 @@ export default function VideoPreview({ mode, ratio, addToast }) {
         </div>
     );
 }
+

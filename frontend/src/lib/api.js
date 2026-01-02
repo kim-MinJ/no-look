@@ -18,6 +18,7 @@ export async function setForceReal(value) {
     return res.json();
 }
 
+
 export async function resetLock() {
     const res = await fetch(`${API_BASE_URL}/control/reset_lock`, { method: 'POST' });
     return res.json();
