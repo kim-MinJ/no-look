@@ -75,6 +75,7 @@ class WSClient {
             this.ws.onerror = null;
             this.ws.onmessage = null;
         }
+
         this.ws = null;
     }
 
