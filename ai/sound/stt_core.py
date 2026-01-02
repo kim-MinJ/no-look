@@ -5,6 +5,7 @@ import json
 import sys
 import queue
 import time
+import re
 
 # Windows 콘솔 인코딩 설정 (이모지 출력용)
 sys.stdout.reconfigure(encoding='utf-8')
@@ -60,9 +61,12 @@ class GhostEars:
         self.temp_filename = os.path.join(base_dir, "temp_ghost_audio.wav")
         self.transcript_file = os.path.join(base_dir, "transcript.txt")
         
-        # [로그] 대화 내용 저장용 파일 (시작 시 초기화)
-        with open(self.transcript_file, "w", encoding="utf-8") as f:
-            f.write(f"=== [No-Look] 대화 로그 시작 ({model_size}) ===\n")
+        # [Memory] 전체 대화 히스토리 (요약/매크로용)
+        self.full_history = []
+        
+        # [로그] 대화 내용 저장용 파일 (기존 기록 유지하며 시작 구분선만 추가)
+        with open(self.transcript_file, "a", encoding="utf-8") as f:
+            f.write(f"\n\n--- 🚀 [No-Look] 세션 시작: {time.strftime('%Y-%m-%d %H:%M:%S')} ({model_size}) ---\n")
 
     def _audio_callback(self, recognizer, audio):
         """백그라운드에서 오디오가 캡처되면 Queue에 넣음"""
@@ -131,9 +135,20 @@ class GhostEars:
                 yield None
 
     def save_to_log(self, text):
-        """인식된 텍스트를 파일에 저장 (GPT가 읽어갈 용도)"""
+        """인식된 텍스트를 파일 및 메모리에 저장 (GPT가 읽어갈 용도)"""
+        timestamp = time.strftime("[%H:%M:%S]")
+        entry = f"{timestamp} {text}"
+        
+        # 파일 저장
         with open(self.transcript_file, "a", encoding="utf-8") as f:
-            f.write(f"{text}\n")
+            f.write(f"{entry}\n")
+            
+        # 메모리 저장
+        self.full_history.append(entry)
+
+    def get_full_transcript(self):
+        """지금까지의 전체 대화 내용을 하나로 합쳐서 반환"""
+        return "\n".join(self.full_history)
 
     def _apply_config(self, config):
         """설정값을 인스턴스 변수에 적용"""
@@ -162,24 +177,33 @@ class GhostEars:
 
     def check_trigger(self, text):
         """
-        텍스트에서 트리거 감지
-        Returns: 
-            - "KEYWORD": 키워드 감지됨
-            - "QUESTION": 질문 패턴 감지됨
-            - None: 트리거 없음
+        텍스트에서 트리거 감지 (정규식 기반 지능형 감지)
         """
         if not text:
             return None
             
-        # 1. 키워드 체크 (이름 등)
+        # 검색 품질을 위해 공백 및 특수문자 제거 버전 준비
+        clean_text = re.sub(r'[^a-zA-Z0-9가-힣]', '', text)
+        
+        # 1. 키워드 체크
         for keyword in self.trigger_keywords:
-            if keyword in text:
+            clean_keyword = re.sub(r'[^a-zA-Z0-9가-힣]', '', keyword)
+            if clean_keyword in clean_text:
                 return ("KEYWORD", keyword)
         
-        # 2. 질문 패턴 체크
+        # 2. 질문/지시 패턴 체크 (정규식 지원)
         for pattern in self.question_patterns:
-            if pattern in text:
+            # 패턴 자체가 포함되어 있는지 혹은 정규식으로 매칭되는지 확인
+            clean_pattern = re.sub(r'[^a-zA-Z0-9가-힣]', '', pattern)
+            if clean_pattern in clean_text:
                 return ("QUESTION", pattern)
+            
+            # 실제 정규식 매칭 시도
+            try:
+                if re.search(pattern, text):
+                    return ("QUESTION", pattern)
+            except:
+                continue
         
         return None
 

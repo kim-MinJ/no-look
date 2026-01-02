@@ -15,7 +15,7 @@ class MacroBot:
         self.api_key = os.getenv("GEMINI_API_KEY")
         if self.api_key:
             genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
+            self.model = genai.GenerativeModel("gemini-2.0-flash")
         else:
             self.model = None
             print("⚠️ GEMINI_API_KEY not found in environment.")
@@ -24,9 +24,9 @@ class MacroBot:
         from stt_core import load_config
         self.config = load_config()
 
-    def get_suggestion(self, current_text: str, history: list = None):
+    def get_suggestion(self, current_text: str, history: list = None, summary: str = None):
         """
-        대화 맥락(history)과 개인화 설정을 바탕으로 답변 생성
+        대화 맥락(history), 전체 요약(summary) 및 개인화 설정을 바탕으로 답변 생성
         """
         if not self.model or not current_text.strip():
             return None
@@ -50,6 +50,9 @@ class MacroBot:
         - 역할: {user_role}
         - 현재 수업: {topic}
         - 원하는 말투: {style}
+
+        [전체 회의 요약 (중요)]
+        {summary if summary else "아직 요약 정보가 없습니다."}
 
         [최근 강의 흐름]
         {context_str if context_str else "(방금 강의 시작)"}

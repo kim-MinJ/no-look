@@ -11,6 +11,7 @@ sys.path.append(os.path.join(base_dir, "sound"))
 from macro_bot import MacroBot
 from zoom_automation import ZoomAutomator
 from stt_core import GhostEars, load_config
+from summarizer import MeetingSummarizer
 
 async def run_auto_macro():
     print("🚀 [Zoom 자동 매크로 서비스] 가동 중... (맥락 이해 모드)")
@@ -19,6 +20,7 @@ async def run_auto_macro():
     ears = GhostEars(config)
     bot = MacroBot()
     automator = ZoomAutomator()
+    summarizer = MeetingSummarizer()
     
     # 전략 1 & 2: 대화 기록을 저장할 바구니 (최근 10줄)
     history = deque(maxlen=10)
@@ -56,22 +58,31 @@ async def run_auto_macro():
                 
                 last_received_time = current_time
                 
+                # [중요] 전체 로그 파일 및 메모리에 실시간 저장
+                ears.save_to_log(text)
+                
                 # 현재 처리 중인 (합쳐진) 문장
                 current_processing_text = " ".join(sentence_buffer)
-                print(f"\n▶ 인식(누적): {current_processing_text}")
+                print(f"▶ 인식(조각): {text} | 누적 문맥: {current_processing_text}")
                 
-                # 트리거 체크 (현재 누적된 문장에 트리거가 있는지 확인)
+                # 트리거 체크 (마지막 조각이 아니라, 지금까지 합쳐진 문장 전체에서 체크!)
                 trigger = ears.check_trigger(current_processing_text)
                 
                 if trigger:
                     trigger_type, matched = trigger
                     print(f"🎯 트리거 감지! ({trigger_type}: {matched})")
+                    print(f"📌 감지된 전체 문장: {current_processing_text}")
                     
                     # Gemini 답변 생성 (진짜 대화 기록 전체를 보냄)
-                    print("🧠 맥락 분석 중...")
-                    # history와 현재 버퍼를 합쳐서 보냄
+                    print("🧠 회의 요약 및 맥락 분석 중...")
+                    
+                    # 1. 전체 기록 요약 생성
+                    full_transcript = ears.get_full_transcript()
+                    current_summary = summarizer.summarize(full_transcript)
+                    
+                    # 2. 요약본과 히스토리를 함께 보내 답변 생성
                     full_context = list(history) + [current_processing_text]
-                    suggestion = bot.get_suggestion(current_processing_text, full_context)
+                    suggestion = bot.get_suggestion(current_processing_text, full_context, current_summary)
                     
                     if suggestion:
                         print(f"💡 추천 답변: {suggestion}")
@@ -84,6 +95,10 @@ async def run_auto_macro():
                         sentence_buffer = []
                     else:
                         print("⚠️ 답변 생성 실패")
+                else:
+                    # 트리거가 없을 때도 디버깅을 위해 가볍게 표시
+                    if len(current_processing_text) > 5:
+                        print(f"   (트리거 미감지: {current_processing_text[:20]}...)")
 
     except KeyboardInterrupt:
         print("\n👋 서비스를 종료합니다.")
