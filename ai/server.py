@@ -2,7 +2,7 @@
 import asyncio
 import os
 import sys
-from typing import Set
+from typing import Set, List
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, APIRouter
@@ -48,6 +48,10 @@ class StringPayload(BaseModel):
     value: str
 
 
+class KeywordsPayload(BaseModel):
+    keywords: List[str]
+
+
 @app.get("/health")
 def health_check():
     return {"ok": True}
@@ -80,6 +84,20 @@ def reset_lock():
     return {"ok": True, "lockedFake": False}
 
 
+@api_router.post("/control/stt/config")
+def update_stt_config(payload: KeywordsPayload):
+    """
+    프론트엔드에서 받은 키워드 리스트로 STT 설정을 업데이트
+    """
+    success = engine.update_stt_config(payload.keywords)
+    if success:
+        print(f"✅ [Server] STT 키워드 업데이트됨: {payload.keywords}")
+        return {"ok": True, "keywords": payload.keywords}
+    else:
+        print("❌ [Server] STT 설정 업데이트 실패 (엔진에 STT 없음)")
+        return {"ok": False, "error": "STT not initialized"}
+
+
 @api_router.get("/state")
 def get_state():
     # ✅ "처음 접속" 트리거: 여기서 warmup 세션 시작
@@ -89,11 +107,6 @@ def get_state():
 
 app.include_router(api_router)
 
-
-@api_router.get("/state")
-def get_state():
-    engine.start_session_if_needed()
-    return engine.get_state()
 
 @app.websocket("/ws/state")
 async def ws_state(websocket: WebSocket):
