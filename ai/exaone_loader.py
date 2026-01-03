@@ -14,7 +14,7 @@ class ExaoneLoader:
         return cls._instance
 
     def _load_model(self):
-        print("📥 Loding LGAI-EXAONE/EXAONE-4.0-1.2B model...")
+        print("[ExaoneLoader] Loading LGAI-EXAONE/EXAONE-4.0-1.2B model...")
         model_id = "LGAI-EXAONE/EXAONE-4.0-1.2B"
         
         try:
@@ -48,11 +48,11 @@ class ExaoneLoader:
 
         output_ids = self._model.generate(
             input_ids.to(self._model.device),
-            max_new_tokens=256,
+            max_new_tokens=64, # 단문 답변이므로 64로 충분
             eos_token_id=self._tokenizer.eos_token_id,
             do_sample=True,
-            temperature=0.7,
-            top_p=0.9
+            temperature=0.3, # 답변의 일관성을 위해 낮춤
+            top_p=0.8        # 가능성 높은 답변 위주로 선택
         )
 
         response = self._tokenizer.decode(output_ids[0][len(input_ids[0]):], skip_special_tokens=True)

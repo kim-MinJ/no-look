@@ -1,8 +1,21 @@
 import os
+import sys
 from dotenv import load_dotenv
+
+# Windows 인코딩 설정
+if sys.stdout.encoding != 'utf-8':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except:
+        pass
 
 # .env 파일 위치를 명시적으로 로드하여 꼬임 방지
 base_dir = os.path.dirname(os.path.abspath(__file__))
+# ai/sound 폴더를 path에 추가하여 모듈 임포트 가능하게 함
+sound_dir = os.path.join(base_dir, "sound")
+if sound_dir not in sys.path:
+    sys.path.append(sound_dir)
+
 # ai 폴더 상위의 .env 파일을 찾습니다.
 dotenv_path = os.path.normpath(os.path.join(base_dir, '..', '.env'))
 
@@ -20,9 +33,9 @@ class MacroBot:
         from stt_core import load_config
         self.config = load_config()
 
-    def get_suggestion(self, current_text: str, history: list = None, summary: str = None):
+    def get_suggestion(self, current_text: str, history: list = None):
         """
-        대화 맥락(history), 전체 요약(summary) 및 개인화 설정을 바탕으로 답변 생성
+        대화 맥락(history) 및 개인화 설정을 바탕으로 답변 생성
         """
         if not self.model or not current_text.strip():
             return None
@@ -33,34 +46,37 @@ class MacroBot:
         topic = persona.get("meeting_topic", "일반 회의")
         style = persona.get("speaking_style", "정중한 구어체")
 
-        # 최근 대화 내용 구성
-        context_str = ""
-        if history:
-            context_str = "\n".join([f"- {h}" for h in history[:-1]])
+        # 최근 대화 내용 구성 (최근 10개로 제한하여 성능 및 집중도 향상)
+        recent_history = history[-10:] if history else []
+        context_str = "\n".join([f"- {h}" for h in recent_history])
 
         prompt = f"""
-        당신은 실시간 온라인 강의를 듣고 있는 '대학생'의 비서입니다.
-        사용자가 강의 중에 잠시 비우거나 졸고 있을 때, 교수님의 질문이나 출석 확인에 대신 답할 수 있는 자연스러운 한국어 채팅 답변을 '단 한 문장' 생성하세요.
+        당신은 온라인 비대면 '실시간 강의'를 수강 중인 대학생의 AI 비서입니다.
+        당신의 목표는 교수님의 질문이나 출석 확인 상황에서 학생이 직접 채팅하는 것 같은 '현실적이고 자연스러운 한국어' 답변을 '단 한 문장' 제안하는 것입니다.
 
-        [학생 정보]
+        [학생 페르소나]
         - 역할: {user_role}
-        - 현재 수업: {topic}
-        - 원하는 말투: {style}
+        - 현재 과목명: {topic}
+        - 말투 성향: {style} (반드시 반영할 것)
 
-        [전체 회의 요약 (중요)]
-        {summary if summary else "아직 요약 정보가 없습니다."}
+        [답변 생성 지침]
+        1. **상황 적합성**: 인사, 출석 대답, 긍정/부정 답변, 리액션 등 상황을 정확히 판단하세요.
+        2. **극도의 자연스러움**: "넵!", "감사합니다 교수님", "잘 보여요", "이해됐습니다" 등 실제 대학생이 쓸법한 구어체를 사용하세요.
+        3. **최소한의 길이**: 15자 이내의 단문으로 답변하세요.
+        4. **결과만 출력**: 설명이나 인사말 없이 오직 전송할 채팅 답변 내용만 출력하세요.
 
-        [최근 강의 흐름]
-        {context_str if context_str else "(방금 강의 시작)"}
+        [상황별 답변 예시 (Few-shot)]
+        질문: "다들 제 목소리 잘 들리나요?" -> 답변: "네, 잘 들립니다!"
+        질문: "화면 공유된 거 보이시죠?" -> 답변: "네 잘 보입니다"
+        질문: "지금까지 설명한 내용 이해되셨나요?" -> 답변: "네 이해됐습니다!"
+        질문: "홍길동 학생 출석했나요?" -> 답변: "네, 출석했습니다."
+        질문: "오늘 수업은 여기까지 하겠습니다. 질문 있나요?" -> 답변: "고생하셨습니다! 감사합니다."
 
-        [교수님의 마지막 말]
+        [현재 실시간 강의 맥락]
+        {context_str if context_str else "(방금 강의 시작됨)"}
+
+        [교수님의 마지막 말씀]
         "{current_text}"
-
-        지침:
-        1. **학생다운 반응**: "네 알겠습니다", "감사합니다", "잘 보입니다/들립니다" 등 학생이 수업 중에 주로 사용하는 자연스러운 표현을 쓰세요.
-        2. **맥락 중시**: 교수님의 질문이 예/아니오 대답인지, 의견을 묻는 것인지 파악하세요.
-        3. **극도의 간결함**: 튀지 않게 핵심만 말하세요. (최대 15자 이내)
-        4. **답변 내용만**: 인사말이나 설명 없이 오직 채팅에 보낼 내용만 출력하세요.
 
         채팅 답변 제안:
         """

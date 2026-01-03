@@ -1,13 +1,13 @@
-// web/src/pages/Dashboard.jsx
 import { useEffect, useState, useCallback, useRef } from 'react';
 import VideoPreview from '../components/VideoPreview';
+import ConfigModal from '../components/ConfigModal';
 
 import TransitionSelector from '../components/TransitionSelector';
 import Toast, { useToast } from '../components/Toast';
 import '../styles/dashboard.css';
 
 import { wsClient } from '../lib/wsClient';
-import { setPauseFake, setForceReal, resetLock, fetchEngineState, controlAssistant } from '../lib/api';
+import { setPauseFake, setForceReal, resetLock, fetchEngineState, controlAssistant, requestMacroType } from '../lib/api';
 
 import logoImg from '../assets/logo.png';
 
@@ -31,11 +31,44 @@ export default function Dashboard() {
 
     const prevWarmingUpRef = useRef(false);
     const scrollRef = useRef(null);
+    const [showConfigModal, setShowConfigModal] = useState(false);
 
-    // Auto-scroll to bottom when sttData changes
+    // ✅ Enter Key to send AI suggestion to Zoom
     useEffect(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        const handleKeyDown = (e) => {
+            // 다른 입력창(input, textarea 등)에 있을 때는 무시
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+                return;
+            }
+
+            // Enter 키 감지 (Shift/Alt 등 조합 제외, 추천 답변이 있을 때만)
+            if (e.key === 'Enter' && sttData.suggestion && !e.shiftKey && !e.ctrlKey) {
+                const sendMacro = async () => {
+                    try {
+                        console.log('🚀 Sending macro to zoom:', sttData.suggestion);
+                        await requestMacroType(sttData.suggestion, false);
+                        addToast('🚀 줌으로 답변을 전송했습니다!', 'info');
+                    } catch (err) {
+                        console.error('Failed to send macro:', err);
+                        addToast('❌ 전송 실패: ' + err.message, 'error');
+                    }
+                };
+                sendMacro();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [sttData.suggestion, addToast]);
+
+    // ✅ Smart Auto-scroll: Only scroll if the user is already near the bottom
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+
+        const isAtBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 100; // 100px threshold
+        if (isAtBottom) {
+            el.scrollTop = el.scrollHeight;
         }
     }, [sttData]);
 
@@ -100,11 +133,19 @@ export default function Dashboard() {
         if (res.ok) addToast('락 초기화 완료', 'success');
     }, [addToast]);
 
-    const toggleAssistant = useCallback(async () => {
-        const next = !assistantEnabled;
-        const res = await controlAssistant(next);
-        if (res.ok) addToast(`Auto Macro: ${next ? 'ON' : 'OFF'}`, 'success');
-    }, [assistantEnabled, addToast]);
+    const toggleAssistant = async () => {
+        try {
+            const newValue = !assistantEnabled;
+            await controlAssistant(newValue);
+            setAssistantEnabled(newValue);
+        } catch (err) {
+            console.error('Failed to toggle assistant:', err);
+        }
+    };
+
+    const handleConfigSave = () => {
+        addToast('⚙️ 설정이 저장되었습니다!', 'success');
+    };
 
     const progress = warmupTotalSec > 0
         ? (warmupTotalSec - warmupRemainingSec) / warmupTotalSec
@@ -164,6 +205,14 @@ export default function Dashboard() {
                         >
                             {assistantEnabled ? 'Auto Macro OFF' : 'Auto Macro ON'}
                         </button>
+                        <button
+                            className="btn btn-icon"
+                            style={{ marginLeft: 8 }}
+                            onClick={() => setShowConfigModal(true)}
+                            title="설정"
+                        >
+                            ⚙️
+                        </button>
                     </div>
 
                     <div className="mode-display">
@@ -186,51 +235,37 @@ export default function Dashboard() {
                 </div>
 
                 {/* ✅ STT Display Section */}
-                <div className="stt-section" style={{
-                    marginTop: '2rem',
-                    padding: '1.5rem',
-                    backgroundColor: 'rgba(0,0,0,0.3)',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255,255,255,0.1)'
-                }}>
-                    <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.2rem', color: '#fff' }}>
+                <div className="stt-section">
+                    <h3 className="stt-title">
                         🎙️ Live Transcript (Auto Macro)
                     </h3>
                     <div
                         className="stt-history"
                         ref={scrollRef}
-                        style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '0.5rem',
-                            marginBottom: '1rem',
-                            opacity: 0.9,
-                            maxHeight: '300px',
-                            overflowY: 'auto',
-                            paddingRight: '8px'
-                        }}
                     >
                         {sttData.history.length === 0 && !sttData.current && (
-                            <div style={{ color: '#666', fontStyle: 'italic' }}>
+                            <div className="stt-empty">
                                 대기 중... (말씀하시면 여기에 표시됩니다)
                             </div>
                         )}
                         {sttData.history.map((text, i) => (
-                            <div key={i} className="stt-line" style={{ color: '#e0e0e0', lineHeight: '1.4' }}>
+                            <div key={i} className="stt-line">
                                 {text}
                             </div>
                         ))}
                     </div>
                     {sttData.current && (
-                        <div className="stt-current" style={{
-                            color: '#4caf50',
-                            fontWeight: '600',
-                            fontSize: '1.1rem',
-                            padding: '0.5rem',
-                            background: 'rgba(76, 175, 80, 0.1)',
-                            borderRadius: '6px'
-                        }}>
+                        <div className="stt-current">
                             ▶ {sttData.current}
+                        </div>
+                    )}
+                    {sttData.suggestion && (
+                        <div className="stt-suggestion">
+                            <span className="suggestion-label">
+                                🤖 AI 추천 답변
+                                <span className="suggestion-hint">Enter를 눌러 전송</span>
+                            </span>
+                            <div className="suggestion-content">{sttData.suggestion}</div>
                         </div>
                     )}
                 </div>
@@ -239,6 +274,13 @@ export default function Dashboard() {
             </div>
 
             <Toast toasts={toasts} onRemove={removeToast} />
+
+            {/* 설정 모달 */}
+            <ConfigModal
+                isOpen={showConfigModal}
+                onClose={() => setShowConfigModal(false)}
+                onSave={handleConfigSave}
+            />
         </div>
     );
 }

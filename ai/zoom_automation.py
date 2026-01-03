@@ -3,6 +3,7 @@ import time
 import pyperclip
 import sys
 from pynput import keyboard
+import pygetwindow as gw
 
 class ZoomAutomator:
     def __init__(self):
@@ -45,10 +46,28 @@ class ZoomAutomator:
 
     def send_to_zoom(self, text):
         """
-        pyautogui를 사용하여 현재 활성화된 창(Zoom 채팅창으로 가정)에 텍스트 전송
+        줌 창을 찾아 활성화한 뒤, pyperclip/pyautogui를 사용하여 텍스트 전송
         """
         try:
-            # 1. 한글 입력을 위해 클립보드 사용 (pyautogui.write는 한글 지원이 완벽하지 않음)
+            # 1. 줌 창 찾기 및 포커스 (자동 순간이동)
+            print("🔍 줌 창 탐색 중...")
+            zoom_windows = [w for w in gw.getAllWindows() if "Zoom" in w.title]
+            
+            if zoom_windows:
+                # 가장 적절한 창 선택 (보통 첫 번째)
+                zoom_win = zoom_windows[0]
+                try:
+                    if zoom_win.isMinimized:
+                        zoom_win.restore()
+                    zoom_win.activate()
+                    print(f"✨ 줌 창 활성화 완료: {zoom_win.title}")
+                    time.sleep(0.3) # 포커스 전환 대기
+                except Exception as e:
+                    print(f"⚠️ 창 활성화 실패 (수동 클릭 필요할 수 있음): {e}")
+            else:
+                print("⚠️ 줌 창을 찾지 못했습니다. 현재 활성화된 창에 전송을 시도합니다.")
+
+            # 2. 한글 입력을 위해 클립보드 사용
             pyperclip.copy(text)
             
             # 2. 잠시 대기 (사용자가 Zoom 창으로 포커스를 옮길 시간을 줄 수도 있음)

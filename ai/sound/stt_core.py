@@ -138,7 +138,10 @@ class GhostEars:
                 yield final_text
                 
             except Exception as e:
-                print(f"⚠️ 변환 중 에러: {e}")
+                # 특정 에러(오디오 장치 끊김 등)에 대한 자세한 로그 추가
+                print(f"⚠️ [STT Core] 변환 중 에러 발생: {e}")
+                # 에러 발생 시 잠시 대기하여 무한 루프 과부하 방지
+                time.sleep(1)
                 yield None
 
     def save_to_log(self, text):
@@ -195,28 +198,29 @@ class GhostEars:
         if not text:
             return None
             
-        # 검색 품질을 위해 공백 및 특수문자 제거 버전 준비
-        clean_text = re.sub(r'[^a-zA-Z0-9가-힣]', '', text)
-        
-        # 1. 키워드 체크
-        for keyword in self.trigger_keywords:
-            clean_keyword = re.sub(r'[^a-zA-Z0-9가-힣]', '', keyword)
-            if clean_keyword in clean_text:
-                return ("KEYWORD", keyword)
-        
-        # 2. 질문/지시 패턴 체크 (정규식 지원)
+        # 1. 원본 텍스트 기반 정규식/패턴 체크 (문장 부호 포함)
         for pattern in self.question_patterns:
-            # 패턴 자체가 포함되어 있는지 혹은 정규식으로 매칭되는지 확인
-            clean_pattern = re.sub(r'[^a-zA-Z0-9가-힣]', '', pattern)
-            if clean_pattern in clean_text:
+            # 특수 기호(?, !) 등이 포함된 패턴을 위해 원본 대조
+            if pattern in text:
                 return ("QUESTION", pattern)
             
             # 실제 정규식 매칭 시도
             try:
-                if re.search(pattern, text):
+                if re.search(pattern, text, re.IGNORECASE):
                     return ("QUESTION", pattern)
             except:
                 continue
+
+        # 2. 검색 품질을 위해 공백 및 특수문자 제거 버전 준비 (키워드 매칭용)
+        clean_text = re.sub(r'[^a-zA-Z0-9가-힣]', '', text)
+        
+        # 3. 키워드 체크
+        for keyword in self.trigger_keywords:
+            clean_keyword = re.sub(r'[^a-zA-Z0-9가-힣]', '', keyword)
+            if not clean_keyword: continue # 빈 키워드 방지
+            
+            if clean_keyword in clean_text:
+                return ("KEYWORD", keyword)
         
         return None
 

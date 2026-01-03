@@ -9,6 +9,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+import json
 
 from engine import NoLookEngine
 from auto_macro_service import assistant_service
@@ -47,6 +48,13 @@ class BoolPayload(BaseModel):
 
 class StringPayload(BaseModel):
     value: str
+
+class ConfigPayload(BaseModel):
+    """config.json 전체 구조"""
+    triggers: dict
+    personalization: dict
+    settings: dict
+    actions: dict
 
 
 @app.get("/health")
@@ -90,20 +98,83 @@ def control_assistant(payload: BoolPayload):
     return {"ok": True, "assistantEnabled": payload.value}
 
 
+@api_router.post("/macro/type")
+def macro_type(payload: StringPayload):
+    """지정된 텍스트를 줌 채팅창(활성화된 창)에 타이핑 및 전송"""
+    try:
+        if assistant_service.automator:
+            import threading
+            threading.Thread(
+                target=assistant_service.automator.send_to_zoom,
+                args=(payload.value,),
+                daemon=True
+            ).start()
+            return {"ok": True, "message": "전송 요청 완료"}
+        else:
+            return {"ok": False, "message": "Automator가 초기화되지 않았습니다."}
+    except Exception as e:
+        return {"ok": False, "detail": str(e)}
+
+
+@api_router.get("/config")
+def get_config():
+    """현재 config.json 내용을 읽어서 반환"""
+    try:
+        # 현재 파일(server.py) 기준으로 상대 경로 사용
+        import os
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(base_dir, "sound", "config.json")
+        
+        with open(config_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+        return config_data
+    except Exception as e:
+        print(f"❌ [Config API] 설정 읽기 실패: {e}")
+        return {"ok": False, "detail": str(e)}
+
+
+@api_router.post("/config")
+def save_config(payload: ConfigPayload):
+    """설정을 config.json에 저장하고 실시간 반영"""
+    try:
+        import os
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(base_dir, "sound", "config.json")
+        config_dict = payload.dict()
+        
+        # config.json 저장
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config_dict, f, ensure_ascii=False, indent=4)
+        
+        # STT 엔진에 실시간 반영
+        if assistant_service._initialized and assistant_service.ears:
+            assistant_service.ears.reload_config()
+        
+        return {"ok": True, "message": "설정이 저장되고 반영되었습니다."}
+    except Exception as e:
+        print(f"❌ [Config API] 설정 저장 실패: {e}")
+        return {"ok": False, "detail": str(e)}
+
+
+def get_full_engine_state():
+    """엔진 상태와 STT 비서 상태를 모두 병합하여 반환"""
+    state = engine.get_state()
+    try:
+        state["stt"] = assistant_service.get_transcript_state()
+        state["assistantEnabled"] = assistant_service._running
+    except Exception as e:
+        print(f"⚠️ State Merge Error: {e}")
+    return state
+
+
 @api_router.get("/state")
 def get_state():
-    # ✅ "처음 접속" 트리거: 여기서 warmup 세션 시작
     engine.start_session_if_needed()
-    return engine.get_state()
+    return get_full_engine_state()
 
 
 app.include_router(api_router)
 
-
-@api_router.get("/state")
-def get_state():
-    engine.start_session_if_needed()
-    return engine.get_state()
 
 @app.websocket("/ws/state")
 async def ws_state(websocket: WebSocket):
@@ -111,12 +182,7 @@ async def ws_state(websocket: WebSocket):
     clients.add(websocket)
     try:
         engine.start_session_if_needed()
-        init_state = engine.get_state()
-        try:
-            init_state["stt"] = assistant_service.get_transcript_state()
-            init_state["assistantEnabled"] = assistant_service._running
-        except Exception as e:
-            print(f"⚠️ Init STT Error: {e}")
+        init_state = get_full_engine_state()
         await websocket.send_json(init_state)
         while True:
             await websocket.receive_text()
@@ -125,18 +191,13 @@ async def ws_state(websocket: WebSocket):
     finally:
         clients.discard(websocket)
 
+
 async def broadcast_state_loop():
     while True:
         if clients:
             engine.start_session_if_needed()
-        state = engine.get_state()
         
-        # ✅ STT 상태 병합
-        try:
-            state["stt"] = assistant_service.get_transcript_state()
-            state["assistantEnabled"] = assistant_service._running
-        except Exception as e:
-            print(f"⚠️ STT State Error: {e}")
+        state = get_full_engine_state()
 
         dead = []
         for ws in list(clients):

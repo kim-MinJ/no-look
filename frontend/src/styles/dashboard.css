@@ -853,7 +853,7 @@ body {
 
 .stt-transcript {
   min-height: 80px;
-  max-height: 160px;
+  max-height: 400px;
   overflow-y: auto;
   padding: 12px 14px;
   background: rgba(0, 0, 0, 0.25);
@@ -1161,4 +1161,151 @@ body {
 
 .toast-close:hover {
   color: var(--text);
+}
+
+/* ======== STT Section (Live Transcript) ======== */
+.stt-section {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-top: 2rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.btn.btn-success {
+  background: linear-gradient(135deg, #00c9ff 0%, #92fe9d 100%);
+  color: #000;
+  font-weight: 700;
+}
+
+.btn.btn-icon {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  font-size: 1.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+}
+
+.btn.btn-icon:hover {
+  transform: translateY(-3px) rotate(20deg);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+}
+
+.stt-title {
+  margin: 0 0 1rem 0;
+  font-size: 1.2rem;
+  color: #fff;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stt-history {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  max-height: 350px;
+  overflow-y: auto;
+  padding-right: 8px;
+  scrollbar-gutter: stable;
+}
+
+.stt-empty {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 0.95rem;
+}
+
+.stt-line {
+  color: #e0e0e0;
+  line-height: 1.5;
+  font-size: 1rem;
+  word-break: break-word;
+}
+
+.stt-current {
+  color: #4caf50;
+  font-weight: 600;
+  font-size: 1.1rem;
+  padding: 0.7rem;
+  background: rgba(76, 175, 80, 0.1);
+  border-radius: 8px;
+  margin-top: 0.5rem;
+  border-left: 3px solid #4caf50;
+}
+
+.stt-suggestion {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, rgba(79, 140, 255, 0.15), rgba(168, 85, 247, 0.15));
+  border: 1px solid rgba(79, 140, 255, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.suggestion-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--primary2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.suggestion-hint {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 400;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.suggestion-content {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.4;
+}
+
+/* Custom Scrollbar for STT History */
+.stt-history::-webkit-scrollbar {
+  width: 6px;
+}
+
+.stt-history::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+
+.stt-history::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+}
+
+.stt-history::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
