@@ -13,7 +13,6 @@ from bridge import VirtualCam
 from bot import MeetingBot
 from rolling_recorder import RollingRecorder
 from scene_transition import TransitionManager
-from sound.stt_core import GhostEars
 
 
 class NoLookEngine:
@@ -54,7 +53,6 @@ class NoLookEngine:
         self.rolling_segment_seconds = int(rolling_segment_seconds)
 
         self.detector = DistractionDetector()
-        self.ears = GhostEars()
         self.generator = StreamGenerator(self.fake_video_path)
         self.transition_manager = TransitionManager(base_dir)
         self.bot = MeetingBot()
@@ -164,13 +162,6 @@ class NoLookEngine:
         with self._lock:
             return dict(self._state)
 
-    # ---------- stt controls ----------
-    def update_stt_config(self, keywords):
-        """서버에서 받은 키워드로 STT 설정 업데이트"""
-        if self.ears:
-            return self.ears.update_config(keywords)
-        return False
-
     # ---------- lifecycle ----------
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -178,10 +169,6 @@ class NoLookEngine:
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
-        
-        # ✅ STT 리스닝 시작
-        if self.ears:
-            self.ears.start_listening()
 
     def stop(self) -> None:
         self._stop_event.set()
@@ -202,13 +189,6 @@ class NoLookEngine:
             except Exception:
                 pass
             self.rolling = None
-        
-        # ✅ STT 리스닝 종료
-        if self.ears and hasattr(self.ears, 'stopper'):
-            try:
-                self.ears.stopper(wait_for_stop=False)
-            except Exception:
-                pass
 
         if self.bridge is not None:
             try:
@@ -218,32 +198,10 @@ class NoLookEngine:
             self.bridge = None
 
     # ---------- internal ----------
-    def _process_stt_queue(self) -> Optional[str]:
-        """STT 큐 처리 및 알림 반환 (Warmup/Main 공통 사용)"""
-        stt_alert = None
-        if self.ears:
-            try:
-                # 큐가 비어있지 않은지 빠르게 체크
-                for text in self.ears.process_queue():
-                    if text:
-                        # ✅ [Log] 파일에 저장
-                        self.ears.save_to_log(text)
-                        
-                        trigger = self.ears.check_trigger(text)
-                        if trigger:
-                            t_type, msg = trigger
-                            stt_alert = f"[{t_type}] {msg}"
-                            print(f"🚨 [STT] {stt_alert}")
-                    break
-            except Exception:
-                pass
-        return stt_alert
-
     def _open_capture(self) -> cv2.VideoCapture:
         if sys.platform == "darwin":
             return cv2.VideoCapture(self.webcam_id, cv2.CAP_AVFOUNDATION)
-        # 윈도우에서 MSMF 에러(-1072875772) 방지 (DirectShow 사용)
-        return cv2.VideoCapture(self.webcam_id, cv2.CAP_DSHOW)
+        return cv2.VideoCapture(self.webcam_id)
 
     def _run(self) -> None:
         self.cap = self._open_capture()
@@ -254,12 +212,7 @@ class NoLookEngine:
         height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 480
         fps = float(self.cap.get(cv2.CAP_PROP_FPS)) or 30.0
 
-        try:
-            self.bridge = VirtualCam(width, height, fps=fps)
-        except Exception as e:
-            print(f"⚠️ [Warning] 가상 카메라 초기화 실패 (OBS 문제): {e}")
-            print("➡️ 가상 카메라 없이 엔진을 실행합니다. (STT/녹화는 정상 작동)")
-            self.bridge = None
+        self.bridge = VirtualCam(width, height, fps=fps)
 
         self.rolling = RollingRecorder(
             out_dir=self.rolling_dir,
@@ -313,9 +266,6 @@ class NoLookEngine:
                     if dt < target_dt:
                         time.sleep(target_dt - dt)
                     last_frame_time = time.time()
-                
-                # ✅ 세션 시작 전에도 STT는 처리 (프론트 연결 없어도 음성 인식 동작)
-                self._process_stt_queue()
                 continue
 
             # ✅ warmup: 추적 OFF + 롤링 저장만
@@ -334,9 +284,6 @@ class NoLookEngine:
                 if self.bridge is not None:
                     self.bridge.send(real_frame)
 
-                # ✅ STT 처리는 bridge와 독립적으로 항상 실행
-                stt_alert = self._process_stt_queue()
-
                 with self._lock:
                     self._state = {
                         **self._state,
@@ -353,7 +300,6 @@ class NoLookEngine:
                         "warmupTotalSec": self.warmup_seconds,
                         "warmupRemainingSec": remaining,
                         "transitionEffect": self.transition_effect,
-                        "sttAlert": stt_alert
                     }
 
                 if self.fps_limit:
@@ -447,9 +393,6 @@ class NoLookEngine:
             if self.bridge is not None:
                 self.bridge.send(output_frame)
 
-            # ✅ STT 처리는 bridge와 독립적으로 항상 실행 (카메라 죽어도 음성 인식 동작)
-            stt_alert = self._process_stt_queue()
-
             with self._lock:
                 self._state = {
                     **self._state,
@@ -467,7 +410,6 @@ class NoLookEngine:
                     "warmingUp": False,
                     "warmupTotalSec": self.warmup_seconds,
                     "warmupRemainingSec": 0,
-                    "sttAlert": stt_alert
                 }
 
             if self.fps_limit:
