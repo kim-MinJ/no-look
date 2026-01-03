@@ -6,6 +6,7 @@ import sys
 import queue
 import time
 import re
+from datetime import datetime
 
 # Windows 콘솔 인코딩 설정 (이모지 출력용)
 sys.stdout.reconfigure(encoding='utf-8')
@@ -55,6 +56,8 @@ class GhostEars:
         
         # [Queue] 오디오 데이터 대기열 (비동기 처리용)
         self.audio_queue = queue.Queue()
+        self.is_listening = False
+        self.stopper = None
         
         # 현재 파일 위치(ai/sound) 기준으로 경로 설정 (어디서 실행하든 여기 저장됨)
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -75,6 +78,10 @@ class GhostEars:
 
     def start_listening(self):
         """백그라운드 리스닝 시작"""
+        if self.is_listening:
+            print("⚠️ [GhostEars] 이미 리스닝 중입니다.")
+            return True
+            
         try:
             self.source = sr.Microphone(device_index=self.device_index, sample_rate=self.sample_rate)
             print(f"👂 [Background Listening] 백그라운드 청취 시작... (Rate: {self.sample_rate}Hz)")
@@ -85,6 +92,7 @@ class GhostEars:
                 self._audio_callback, 
                 phrase_time_limit=5 # 응답 속도를 위해 짧게 끊음
             )
+            self.is_listening = True
             return True
         except Exception as e:
             print(f"❌ 마이크 초기화 실패: {e}")
@@ -94,15 +102,14 @@ class GhostEars:
         """Queue에 쌓인 오디오를 하나씩 꺼내서 처리 (제너레이터)"""
         while True:
             try:
-                # 0.5초마다 큐 확인
-                audio_data = self.audio_queue.get(timeout=0.5)
+                # 0.5초마다 큐 확인 -> 0.01초로 단축 (프레임 저하 방지)
+                audio_data = self.audio_queue.get(timeout=0.01)
             except queue.Empty:
                 yield None
                 continue
             
             # 오디오 처리 (기존 로직)
             try:
-                print("⚡ [Processing] 오디오 변환 중...")
                 with open(self.temp_filename, "wb") as f:
                     f.write(audio_data.get_wav_data())
                 
@@ -136,15 +143,21 @@ class GhostEars:
 
     def save_to_log(self, text):
         """인식된 텍스트를 파일 및 메모리에 저장 (GPT가 읽어갈 용도)"""
-        timestamp = time.strftime("[%H:%M:%S]")
-        entry = f"{timestamp} {text}"
-        
-        # 파일 저장
-        with open(self.transcript_file, "a", encoding="utf-8") as f:
-            f.write(f"{entry}\n")
+        try:
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            entry = f"[{timestamp}] {text}"
             
-        # 메모리 저장
-        self.full_history.append(entry)
+            # 파일 저장
+            with open(self.transcript_file, "a", encoding="utf-8") as f:
+                f.write(f"{entry}\n")
+                f.flush()
+                # os.fsync(f.fileno()) # 성능을 위해 선택적 사용
+                
+            # 메모리 저장
+            self.full_history.append(entry)
+            print(f"💾 [Log Saved] {entry}")
+        except Exception as e:
+            print(f"❌ [Log Error] 저장 실패: {e}")
 
     def get_full_transcript(self):
         """지금까지의 전체 대화 내용을 하나로 합쳐서 반환"""
