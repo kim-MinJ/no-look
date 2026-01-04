@@ -134,18 +134,11 @@ export default function VideoPreview({ mode, ratio, addToast }) {
                 </div>
             )}
 
-            <div className="preview-container">
-                <div className={getPreviewClass('REAL')}>
-                    <div className="preview-label">REAL</div>
+            <div className="preview-container single">
+                <div className={`preview-box active ${isTransitioning ? 'transitioning' : ''}`}>
+                    <div className={`preview-label ${mode.toLowerCase()}`}>{mode}</div>
                     <video ref={realVideoRef} autoPlay muted playsInline className="preview-video" />
-                    {!hasPermission && hasPermission !== null && (
-                        <div className="preview-placeholder">카메라 권한 필요</div>
-                    )}
-                </div>
-
-                <div className={getPreviewClass('FAKE')}>
-                    <div className="preview-label">FAKE</div>
-                    <canvas ref={fakeCanvasRef} className="preview-canvas" />
+                    <canvas ref={fakeCanvasRef} className="preview-canvas" style={{ display: 'none' }} />
                     {!hasPermission && hasPermission !== null && (
                         <div className="preview-placeholder">카메라 권한 필요</div>
                     )}
