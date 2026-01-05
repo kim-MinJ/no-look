@@ -23,7 +23,6 @@ class AutoAssistantService:
         self._running = False
         self._thread: Optional[threading.Thread] = None
 
-        # ✅ NameError 안 나게 여기서 확실히 로드
         self.config = load_config()
 
         self.ears: Optional[GhostEars] = None
@@ -40,8 +39,10 @@ class AutoAssistantService:
         self.last_suggestion = None
         self._lock = threading.Lock()
 
+        # ✅ 워치독은 "리스닝 시작 이후"에만 의미 있음
         self.last_heartbeat = time.time()
-        self._watchdog_thread = None
+        self._watchdog_thread: Optional[threading.Thread] = None
+        self._watchdog_enabled = False  # ✅ 리스닝 성공 후 True
 
     def start(self):
         if self._running and self._thread and self._thread.is_alive():
@@ -52,10 +53,6 @@ class AutoAssistantService:
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
 
-        if not self._watchdog_thread or not self._watchdog_thread.is_alive():
-            self._watchdog_thread = threading.Thread(target=self._watchdog_loop, daemon=True)
-            self._watchdog_thread.start()
-
         print("🚀 [AutoAssistant] 서비스 시작")
 
     def stop(self):
@@ -64,6 +61,7 @@ class AutoAssistantService:
 
         print("🛑 [AutoAssistant] 종료 중...")
         self._running = False
+        self._watchdog_enabled = False
 
         if self.ears:
             self.ears.stop_listening()
@@ -81,15 +79,26 @@ class AutoAssistantService:
         try:
             print("⏳ [AutoAssistant] 초기화 중...")
             self.config = load_config()
+
+            # ✅ 여기서 모델 로딩이 오래 걸려도 워치독은 안 돎
             self.ears = GhostEars(self.config)
             self.bot = MacroBot()
             self.automator = ZoomAutomator()
+
             self._initialized = True
             print("✅ [AutoAssistant] 초기화 완료")
             return True
         except Exception as e:
             print(f"❌ [AutoAssistant] 초기화 실패: {e}")
             return False
+
+    def _start_watchdog_if_needed(self):
+        """✅ 리스닝 성공 이후에만 워치독 시작"""
+        if self._watchdog_thread and self._watchdog_thread.is_alive():
+            return
+        self._watchdog_enabled = True
+        self._watchdog_thread = threading.Thread(target=self._watchdog_loop, daemon=True)
+        self._watchdog_thread.start()
 
     def _run_loop(self):
         if not self._initialize_models():
@@ -98,10 +107,15 @@ class AutoAssistantService:
 
         print(f"🎤 마이크 인덱스: {self.ears.device_index}")
 
+        # ✅ 리스닝 성공해야 워치독 시작
         if not self.ears.start_listening():
             print("❌ [AutoAssistant] 마이크 리스닝 시작 실패")
             self._running = False
             return
+
+        # ✅ 여기서부터 워치독 ON
+        self.last_heartbeat = time.time()
+        self._start_watchdog_if_needed()
 
         print("👂 [AutoAssistant] 듣기 시작")
 
@@ -110,6 +124,7 @@ class AutoAssistantService:
 
         try:
             while self._running:
+                # ✅ 루프 생존 하트비트
                 self.last_heartbeat = time.time()
 
                 for text in self.ears.process_queue():
@@ -132,6 +147,11 @@ class AutoAssistantService:
         print("🕵️ [AutoAssistant] 워치독 시작")
         while self._running:
             time.sleep(5)
+
+            # ✅ 리스닝 성공 전이면 감시하지 않음
+            if not self._watchdog_enabled:
+                continue
+
             idle = time.time() - self.last_heartbeat
             if idle > 20:
                 print(f"🚨 [Watchdog] 무응답 {idle:.1f}s → 리스너 재시작 시도")

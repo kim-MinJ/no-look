@@ -42,8 +42,8 @@ class GhostEars:
 
         self.model = None
         try:
-            # device="auto" / compute_type="int8"는 CPU에서도 잘 돌아감
-            self.model = WhisperModel(model_size, device="auto", compute_type="int8")
+            # ✅ GPU/cuDNN 없는 환경에서 오류 방지를 위해 CPU 명시 사용
+            self.model = WhisperModel(model_size, device="cpu", compute_type="int8")
             print("✅ 모델 로딩 완료!")
         except Exception as e:
             print(f"❌ 모델 로딩 실패: {e}")
