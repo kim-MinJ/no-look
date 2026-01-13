@@ -83,3 +83,4 @@ python-dotenv
 transformers
 torch
 accelerate
+obs-websocket-py
