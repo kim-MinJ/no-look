@@ -1,15 +1,21 @@
 {
     "triggers": {
         "keywords": [
-            "유나",
             "승준",
             "승준씨",
-            "유나님",
-            "윤화",
-            "윤아",
-            "유난히"
+            "질문",
+            "답변",
+            "말씀",
+            "유나",
+            "?"
         ],
-        "question_patterns": []
+        "question_patterns": [
+            "부탁",
+            "해 보세요",
+            "말해봐",
+            "있나요",
+            "?"
+        ]
     },
     "personalization": {
         "user_role": "강의를 듣는 대학생",
@@ -25,6 +31,6 @@
     },
     "actions": {
         "on_trigger": "notify",
-        "auto_response": true
+        "auto_response": false
     }
 }

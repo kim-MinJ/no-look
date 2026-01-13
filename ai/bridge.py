@@ -60,7 +60,7 @@ class VirtualCam:
             backend_candidates.append(self.backend)
         backend_candidates += ["obs", None]
 
-        fmt_candidates = [PixelFormat.BGR, PixelFormat.RGB]
+        fmt_candidates = [PixelFormat.RGB, PixelFormat.BGR]
 
         last_err = None
         for be in backend_candidates:
