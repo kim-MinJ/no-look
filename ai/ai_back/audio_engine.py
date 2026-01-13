@@ -10,7 +10,7 @@ class AudioEngine:
         self.p = pyaudio.PyAudio()
         self.stream = None
         self.running = False
-        self.queues = set() # Set of asyncio.Queue for connected clients
+        self.queues = set() # 연결된 클라이언트를 위한 asyncio.Queue 집합
 
     def start(self):
         if self.running:
@@ -30,19 +30,17 @@ class AudioEngine:
             print(f"[Audio] Failed to start microphone: {e}")
 
     def _callback(self, in_data, frame_count, time_info, status):
-        # Broadcast to all connected websocket queues
-        # Note: This runs in a separate thread, so we use loop.call_soon_threadsafe if needed,
-        # but for simple queues we can try direct put. 
-        # However, asyncio queues are not thread-safe. We need a bridge.
-        # For simplicity in this architecture, we will just store data in a buffer or use a thread-safe queue if needed.
-        # But here we are integrating with FastAPI Websockets.
+        # 브로드캐스트: 연결된 모든 웹소켓 큐에 데이터 전송
+        # 주의: 이 코드는 별도 스레드에서 실행되므로 thread-safe가 필요함.
+        # 간단한 구조를 위해 여기서는 큐에 직접 넣거나 thread-safe 큐를 사용.
+        # FastAPI 웹소켓과 통합되어 있음.
         
-        # Strategy: We will iterate over a list of connected client helper objects and call their push method.
+        # 전략: 연결된 클라이언트 큐 목록을 순회하며 데이터 푸시.
         for q in list(self.queues):
             try:
                 q.put_nowait(in_data)
             except asyncio.QueueFull:
-                pass # Drop frame if client is slow
+                pass # 클라이언트가 느리면 프레임 드롭
         return (None, pyaudio.paContinue)
 
     async def get_audio_generator(self):

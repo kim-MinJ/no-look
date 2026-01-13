@@ -1,0 +1,33 @@
+.face-detector {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+.face-detector video {
+    width: 640px;
+    height: 480px;
+    transform: scaleX(-1);
+    /* Mirror effect */
+}
+
+.face-detector canvas {
+    width: 640px;
+    height: 480px;
+    transform: scaleX(-1);
+    /* Mirror effect to match video */
+}
+
+.controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.macro-control {
+    display: flex;
+    gap: 10px;
+}

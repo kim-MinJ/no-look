@@ -10,7 +10,7 @@ class OBSClient:
         self.ws = None
         self.connected = False
         
-        # Start connection in background
+        # 백그라운드에서 연결 시작
         self.connect_thread = threading.Thread(target=self._connect_loop, daemon=True)
         self.connect_thread.start()
 
@@ -24,7 +24,7 @@ class OBSClient:
                     print(f"[OBS] Connected to {self.host}:{self.port}")
             except Exception as e:
                 self.connected = False
-                # print(f"[OBS] Connection failed: {e}")
+                # print(f"[OBS] 연결 실패: {e}")
             
             time.sleep(5)
 

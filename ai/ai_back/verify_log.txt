@@ -1,0 +1,9 @@
+[Audio] Connected! Waiting for data...
+[Control] Received: {"status":"ok","echo":{"type":"trigger","event":"gaze_off"}}
+[Control] Verified successfully!
+[Audio] Received 2048 bytes (Packet #10)
+[Audio] Received 2048 bytes (Packet #20)
+[Audio] Received 2048 bytes (Packet #30)
+[Audio] Received 2048 bytes (Packet #40)
+[Audio] Received 2048 bytes (Packet #50)
+[Audio] Verified successfully!

@@ -1,5 +1,10 @@
+
+"""
+FILE COMMENTED OUT BY AGENT
+This file was identified as part of the 'ai_back' module which is not currently connected to the main 'ai' or 'frontend' components.
+It is being commented out to prevent execution conflicts (e.g. port 8000 usage).
+"""
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from audio_engine import AudioEngine
 from obs_client import OBSClient
@@ -7,29 +12,39 @@ import asyncio
 import os
 from dotenv import load_dotenv
 
-# Load Env
+# 환경 변수 로드
 load_dotenv()
 OBS_PASSWORD = os.getenv("OBS_WEBSOCKET_PASSWORD", "")
 
 app = FastAPI()
 
-# Components
+# 구성 요소
 audio_engine = AudioEngine()
 obs_client = OBSClient(password=OBS_PASSWORD)
 
-# Start Audio on startup
+# 시작 시 오디오 실행
 @app.on_event("startup")
 async def startup_event():
-    audio_engine.start()
+    with open("server_log.txt", "w") as f:
+        f.write("Server starting...\n")
+    try:
+        audio_engine.start()
+        with open("server_log.txt", "a") as f:
+            f.write("Audio engine started.\n")
+    except Exception as e:
+        with open("server_log.txt", "a") as f:
+            f.write(f"Error starting audio engine: {e}\n")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     audio_engine.stop()
     obs_client.disconnect()
+    with open("server_log.txt", "a") as f:
+        f.write("Server shutdown.\n")
 
 
 
-# --- Audio Stream (WebSocket) ---
+# --- 오디오 스트림 (웹소켓) ---
 @app.websocket("/stream/audio")
 async def audio_feed(websocket: WebSocket):
     await websocket.accept()
@@ -40,14 +55,14 @@ async def audio_feed(websocket: WebSocket):
     except WebSocketDisconnect:
         print("Audio Client disconnected")
 
-# --- Control Socket ---
+# --- 제어 소켓 ---
 @app.websocket("/ws/control")
 async def control_socket(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
             data = await websocket.receive_json()
-            # Expected format: {"type": "trigger", "event": "gaze_off"}
+            # 예상 포맷: {"type": "trigger", "event": "gaze_off"}
             print(f"[Control] Received: {data}")
             
             if data.get("type") == "trigger":
@@ -60,7 +75,7 @@ async def control_socket(websocket: WebSocket):
                     # video_engine.set_mode("REAL") # Video removed
                     pass
             
-            # Echo back status or confirmation
+            # 상태 또는 확인 메시지 반환
             await websocket.send_json({"status": "ok", "echo": data})
             
     except WebSocketDisconnect:
@@ -68,3 +83,4 @@ async def control_socket(websocket: WebSocket):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
+

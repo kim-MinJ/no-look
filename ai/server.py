@@ -10,6 +10,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from obs_controller import OBSController
+
 
 from engine import NoLookEngine
 from auto_macro_service import assistant_service
@@ -21,6 +23,8 @@ from config_loader import load_config as load_cfg, save_config as save_cfg
 def resource_path(relative_path: str) -> str:
     base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_path, relative_path)
+
+
 
 
 app = FastAPI()
@@ -51,6 +55,14 @@ class BoolPayload(BaseModel):
 
 class StringPayload(BaseModel):
     value: str
+
+obs = OBSController()
+obs.connect()
+
+@app.post("/control/scene")
+async def change_scene(payload: dict):
+    obs.switch_scene(payload["scene"])
+    return {"ok": True}
 
 
 class ConfigPayload(BaseModel):
@@ -215,6 +227,49 @@ async def startup():
 async def shutdown():
     engine.stop()
     assistant_service.stop()
+
+@app.websocket("/ws/ai")
+async def ai_service(websocket: WebSocket):
+    """
+    AI Service WebSocket
+    Handles:
+    - Bot reactions (OpenAI)
+    - AI suggestions (Gemini)
+    """
+    await websocket.accept()
+    print("🔗 Frontend connected to AI service")
+    
+    try:
+        while True:
+            data = await websocket.receive_json()
+            message_type = data.get("type")
+            
+            # OpenAI Bot Reaction
+            if message_type == "reaction_request":
+                print("🤖 Generating bot reaction...")
+                reaction = meeting_bot.get_reaction()
+                await websocket.send_json({
+                    "type": "reaction",
+                    "text": reaction
+                })
+                print(f"✅ Sent reaction: {reaction}")
+            
+            # Gemini AI Suggestion
+            elif message_type == "suggestion_request":
+                transcript = data.get("transcript", "")
+                print(f"🤖 Generating AI suggestion for: {transcript[:50]}...")
+                suggestion = macro_bot.get_suggestion(transcript)
+                await websocket.send_json({
+                    "type": "suggestion",
+                    "text": suggestion
+                })
+                print(f"✅ Sent suggestion: {suggestion}")
+            
+            else:
+                print(f"⚠️ Unknown message type: {message_type}")
+                
+    except WebSocketDisconnect:
+        print("❌ Frontend disconnected from AI service")
 
 
 static_dir = resource_path("static")
