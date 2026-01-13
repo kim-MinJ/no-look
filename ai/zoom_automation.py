@@ -1,16 +1,32 @@
-import pyautogui
+import os
 import time
-import pyperclip
 import sys
-from pynput import keyboard
-import pygetwindow as gw
+
+# Docker/headless 환경 체크
+HEADLESS = os.environ.get('DISPLAY') is None and sys.platform != 'win32'
+
+if not HEADLESS:
+    import pyautogui
+    import pyperclip
+    from pynput import keyboard
+    import pygetwindow as gw
+    pyautogui.FAILSAFE = True
+else:
+    # Docker 환경에서는 dummy 모듈 사용
+    pyautogui = None
+    pyperclip = None
+    keyboard = None
+    gw = None
+
 
 class ZoomAutomator:
     def __init__(self):
-        # 안전장치: 마우스를 화면 모서리로 급히 옮기면 프로그램 중단
-        pyautogui.FAILSAFE = True
+        self.headless = HEADLESS
         self.confirmed = False
         self.cancelled = False
+        if not self.headless and pyautogui:
+            # 안전장치: 마우스를 화면 모서리로 급히 옮기면 프로그램 중단
+            pyautogui.FAILSAFE = True
 
     def _on_press(self, key):
         try:
