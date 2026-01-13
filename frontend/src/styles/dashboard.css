@@ -450,9 +450,15 @@ body {
 
 .preview-container {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 12px;
 }
+
+/* preview-box가 2개 이상이면 그때만 2칸으로 */
+.preview-container:has(.preview-box:nth-child(2)) {
+  grid-template-columns: 1fr 1fr;
+}
+/* ✅✅✅ 여기까지 ✅✅✅ */
 
 .preview-box {
   position: relative;

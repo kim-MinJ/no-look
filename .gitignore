@@ -418,3 +418,6 @@ ai/tts_out/**
 # --- allow frontend src/lib ---
 !frontend/src/lib/
 !frontend/src/lib/**
+
+ai/sound/temp_ghost_audio.wav
+ai/sound/*.wav

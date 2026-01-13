@@ -201,7 +201,7 @@ class NoLookEngine:
     def _open_capture(self) -> cv2.VideoCapture:
         if sys.platform == "darwin":
             return cv2.VideoCapture(self.webcam_id, cv2.CAP_AVFOUNDATION)
-        return cv2.VideoCapture(self.webcam_id)
+        return cv2.VideoCapture(self.webcam_id, cv2.CAP_MSMF)
 
     def _run(self) -> None:
         self.cap = self._open_capture()

@@ -99,11 +99,8 @@ def save_config(cfg: Dict[str, Any]) -> None:
 
 
 def get_transcript_path() -> Path:
-    # transcript는 항상 user 폴더에 저장(쓰기 안전)
-    appdata = os.getenv("APPDATA")
-    if appdata:
-        user_dir = Path(appdata) / APP_NAME
-    else:
-        user_dir = Path.home() / f".{APP_NAME.lower()}"
-    user_dir.mkdir(parents=True, exist_ok=True)
-    return user_dir / "transcript.txt"
+    # ✅ [Developer Fix] 로그 확인 편의를 위해 프로젝트 폴더(ai/sound/transcript.txt)에 저장
+    base_dir = Path(__file__).resolve().parent
+    sound_dir = base_dir / "sound"
+    sound_dir.mkdir(parents=True, exist_ok=True)
+    return sound_dir / "transcript.txt"

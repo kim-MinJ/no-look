@@ -12,7 +12,12 @@ sound_dir = os.path.join(current_dir, "sound")
 if sound_dir not in sys.path:
     sys.path.append(sound_dir)
 
-from macro_bot import MacroBot
+# 프로젝트 파일명 흔들려도 돌아가게 (bot.py / macro_bot.py 둘 다 대응)
+try:
+    from bot import MacroBot
+except ImportError:
+    from macro_bot import MacroBot
+
 from zoom_automation import ZoomAutomator
 from stt_core import GhostEars
 from config_loader import load_config
@@ -39,10 +44,10 @@ class AutoAssistantService:
         self.last_suggestion = None
         self._lock = threading.Lock()
 
-        # ✅ 워치독은 "리스닝 시작 이후"에만 의미 있음
+        # ✅ 워치독은 리스닝 성공 이후에만 켬
         self.last_heartbeat = time.time()
         self._watchdog_thread: Optional[threading.Thread] = None
-        self._watchdog_enabled = False  # ✅ 리스닝 성공 후 True
+        self._watchdog_enabled = False
 
     def start(self):
         if self._running and self._thread and self._thread.is_alive():
@@ -52,7 +57,6 @@ class AutoAssistantService:
         self._running = True
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
-
         print("🚀 [AutoAssistant] 서비스 시작")
 
     def stop(self):
@@ -80,7 +84,6 @@ class AutoAssistantService:
             print("⏳ [AutoAssistant] 초기화 중...")
             self.config = load_config()
 
-            # ✅ 여기서 모델 로딩이 오래 걸려도 워치독은 안 돎
             self.ears = GhostEars(self.config)
             self.bot = MacroBot()
             self.automator = ZoomAutomator()
@@ -93,7 +96,6 @@ class AutoAssistantService:
             return False
 
     def _start_watchdog_if_needed(self):
-        """✅ 리스닝 성공 이후에만 워치독 시작"""
         if self._watchdog_thread and self._watchdog_thread.is_alive():
             return
         self._watchdog_enabled = True
@@ -107,13 +109,12 @@ class AutoAssistantService:
 
         print(f"🎤 마이크 인덱스: {self.ears.device_index}")
 
-        # ✅ 리스닝 성공해야 워치독 시작
+        # ✅ 리스닝 성공해야 워치독 ON
         if not self.ears.start_listening():
             print("❌ [AutoAssistant] 마이크 리스닝 시작 실패")
             self._running = False
             return
 
-        # ✅ 여기서부터 워치독 ON
         self.last_heartbeat = time.time()
         self._start_watchdog_if_needed()
 
@@ -124,7 +125,6 @@ class AutoAssistantService:
 
         try:
             while self._running:
-                # ✅ 루프 생존 하트비트
                 self.last_heartbeat = time.time()
 
                 for text in self.ears.process_queue():
@@ -148,7 +148,6 @@ class AutoAssistantService:
         while self._running:
             time.sleep(5)
 
-            # ✅ 리스닝 성공 전이면 감시하지 않음
             if not self._watchdog_enabled:
                 continue
 
@@ -169,6 +168,7 @@ class AutoAssistantService:
 
     def _handle_text(self, text: str):
         now = time.time()
+
         self.ears.save_to_log(text)
         print(f"▶ [STT]: {text}")
 
@@ -184,20 +184,26 @@ class AutoAssistantService:
             self.last_received_time = now
             current_processing_text = " ".join(self.sentence_buffer)
 
+        # ✅ KEYWORD만 “답변 생성” 트리거로 인정
         trigger = self.ears.check_trigger(current_processing_text)
-        if trigger:
-            if self._ai_busy:
-                return
+        if not trigger:
+            return
+        if trigger[0] != "KEYWORD":
+            # QUESTION 등은 감지 로그만 남기고 생성은 안 함
+            return
 
-            with self._lock:
-                context_snapshot = [item["text"] for item in self.history]
-                self.sentence_buffer = []
+        if self._ai_busy:
+            return
 
-            threading.Thread(
-                target=self._handle_trigger,
-                args=(trigger, current_processing_text, context_snapshot),
-                daemon=True
-            ).start()
+        with self._lock:
+            context_snapshot = [item["text"] for item in self.history]
+            self.sentence_buffer = []
+
+        threading.Thread(
+            target=self._handle_trigger,
+            args=(trigger, current_processing_text, context_snapshot),
+            daemon=True
+        ).start()
 
     def _handle_trigger(self, trigger, current_processing_text, context_snapshot):
         self._ai_busy = True
@@ -223,7 +229,7 @@ class AutoAssistantService:
         except Exception as e:
             print(f"❌ [AutoAssistant] 답변 생성 에러: {e}")
         finally:
-            time.sleep(3.0)
+            time.sleep(2.0)
             self._ai_busy = False
             print("✅ [AutoAssistant] 대기")
 
@@ -234,6 +240,22 @@ class AutoAssistantService:
                 "current": " ".join(self.sentence_buffer) if self.sentence_buffer else "",
                 "suggestion": self.last_suggestion,
             }
+
+    # ✅ (선택) “프론트 버튼 클릭”으로만 전송되게 쓰는 함수
+    def send_suggestion_to_zoom(self):
+        """자동이 아니라 '사용자 클릭'으로 호출되는 용도"""
+        if not self.automator:
+            return False, "Automator 미초기화"
+        if not self.last_suggestion:
+            return False, "보낼 suggestion 없음"
+
+        # 여기서 실제 전송은 automator가 수행
+        threading.Thread(
+            target=self.automator.send_to_zoom,
+            args=(self.last_suggestion,),
+            daemon=True
+        ).start()
+        return True, "전송 요청 완료"
 
 
 assistant_service = AutoAssistantService()
