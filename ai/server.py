@@ -57,7 +57,11 @@ class StringPayload(BaseModel):
     value: str
 
 obs = OBSController()
-obs.connect()
+try:
+    obs.connect()
+    print("✅ OBS Connected")
+except Exception as e:
+    print(f"⚠️ OBS 연결 실패 (서버는 계속 실행됨): {e}")
 
 @app.post("/control/scene")
 async def change_scene(payload: dict):
