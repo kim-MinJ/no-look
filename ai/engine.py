@@ -203,10 +203,78 @@ class NoLookEngine:
             return cv2.VideoCapture(self.webcam_id, cv2.CAP_AVFOUNDATION)
         return cv2.VideoCapture(self.webcam_id)
 
+    def _run_dummy_mode(self) -> None:
+        """✅ Webcam 없는 환경(Docker)에서 상태만 업데이트하는 더미 모드"""
+        print("🔄 더미 모드 시작 - 상태 업데이트만 동작합니다.")
+        
+        while not self._stop_event.is_set():
+            now = time.time()
+            
+            # 세션 시작 전이면 대기
+            if not self.session_active:
+                with self._lock:
+                    self._state = {
+                        **self._state,
+                        "sessionActive": False,
+                        "mode": "REAL",
+                        "ratio": 0.0,
+                        "reasons": ["WAITING_FIRST_CONNECT", "NO_WEBCAM"],
+                        "timestamp": now,
+                        "warmingUp": False,
+                        "warmupRemainingSec": 0,
+                    }
+                time.sleep(0.1)
+                continue
+            
+            # warmup 진행 중
+            if self._warming_up:
+                remaining = max(0, int(self._warmup_end - now))
+                notice = None
+                
+                if now >= self._warmup_end:
+                    self._warming_up = False
+                    notice = "✅ 녹화 완료! (더미 모드)"
+                
+                with self._lock:
+                    self._state = {
+                        **self._state,
+                        "sessionActive": True,
+                        "mode": "REAL",
+                        "ratio": 0.0,
+                        "reasons": ["WARMUP_RECORDING", "NO_WEBCAM"],
+                        "timestamp": now,
+                        "notice": notice,
+                        "warmingUp": self._warming_up,
+                        "warmupTotalSec": self.warmup_seconds,
+                        "warmupRemainingSec": remaining,
+                    }
+                time.sleep(0.1)
+                continue
+            
+            # warmup 완료 후 - 더미 상태 유지
+            with self._lock:
+                self._state = {
+                    **self._state,
+                    "sessionActive": True,
+                    "mode": "REAL",
+                    "ratio": 0.0,
+                    "lockedFake": False,
+                    "reasons": ["DUMMY_MODE", "NO_WEBCAM"],
+                    "timestamp": now,
+                    "warmingUp": False,
+                    "warmupRemainingSec": 0,
+                }
+            time.sleep(0.1)
+
+
     def _run(self) -> None:
         self.cap = self._open_capture()
+        
+        # ✅ Docker/headless 환경: Webcam 없으면 더미 모드로 동작
         if not self.cap.isOpened():
-            raise RuntimeError(f"Webcam open failed: {self.webcam_id}")
+            print(f"⚠️ Webcam {self.webcam_id} 없음 - 더미 모드로 동작합니다.")
+            self._run_dummy_mode()
+            return
 
         width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 640
         height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 480
