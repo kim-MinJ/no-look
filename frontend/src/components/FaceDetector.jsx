@@ -185,7 +185,8 @@ const FaceDetector = ({ onDistraction }) => {
 
     // 3. AI Backend WebSocket (반응봇)
     const connectAI = () => {
-        const ws = new WebSocket("ws://localhost:8000/ws/ai");
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws/ai`);
 
         ws.onopen = () => {
             console.log("✅ AI Backend Connected");
@@ -435,7 +436,7 @@ const FaceDetector = ({ onDistraction }) => {
 
     const sendMacro = async (app) => {
         try {
-            await fetch("http://localhost:8000/control/macro", {
+            await fetch("/api/control/macro", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ text: inputText, app }),
