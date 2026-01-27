@@ -201,7 +201,7 @@ class NoLookEngine:
     def _open_capture(self) -> cv2.VideoCapture:
         if sys.platform == "darwin":
             return cv2.VideoCapture(self.webcam_id, cv2.CAP_AVFOUNDATION)
-        return cv2.VideoCapture(self.webcam_id)
+        return cv2.VideoCapture(self.webcam_id, cv2.CAP_MSMF)
 
     def _run_dummy_mode(self) -> None:
         """✅ Webcam 없는 환경(Docker)에서 상태만 업데이트하는 더미 모드"""
